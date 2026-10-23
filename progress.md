@@ -2,14 +2,14 @@
 
 Live tracker of implementation progress per phase. Detailed notes, decisions, and evidence live in each phase's `docs/history/<phase>/history.md`; the phase summary table is in [docs/10-project-history.md](docs/10-project-history.md).
 
-**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-10-23
+**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-10-24
 
 ## Summary
 
 | Phase | Milestone | Status | Done / Total |
 |---|---|---|---|
 | 0 | Setup | ✅ Done | 10 / 10 |
-| 1 | Data & metric definitions | ⬜ Not started | 0 / 6 |
+| 1 | Data & metric definitions | 🟡 In progress | 5 / 6 |
 | 2 | Database & ingestion | ⬜ Not started | 0 / 7 |
 | 3 | Analytics | ⬜ Not started | 0 / 6 |
 | 4 | Churn model | ⬜ Not started | 0 / 8 |
@@ -31,13 +31,13 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 
 **Exit:** clean local setup, documented data source, no secrets in Git.
 
-## Phase 1 — Data & metric definitions ⬜  ([history](docs/history/phase-1-data-and-metrics/history.md))
-- [ ] Inspect schema, types, missing values, duplicates, timestamps
-- [ ] Write data dictionary
-- [ ] Define qualifying activity events
-- [ ] Define funnel steps and conversion rules
-- [ ] Define cohort and retention periods
-- [ ] Validate metrics on hand-checkable examples
+## Phase 1 — Data & metric definitions 🟡  ([history](docs/history/phase-1-data-and-metrics/history.md))
+- [ ] Inspect schema, types, missing values, duplicates, timestamps (synthetic log validated; Telco CSV still to download and inspect)
+- [x] Write data dictionary
+- [x] Define qualifying activity events
+- [x] Define funnel steps and conversion rules
+- [x] Define cohort and retention periods
+- [x] Validate metrics on hand-checkable examples
 
 ## Phase 2 — Database & ingestion ⬜  ([history](docs/history/phase-2-database-and-ingestion/history.md))
 - [ ] Supabase project and PostgreSQL schema
