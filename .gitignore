@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+backend/app/ml/artifacts/*.joblib
+data/raw/
+data/processed/
+.streamlit/secrets.toml
+.ruff_cache/

@@ -1,0 +1,53 @@
+# 7. Infrastructure & deployment
+
+> Deploy only after the local workflow is reliable (Phase 7 exit).
+
+## 7.1 Target topology (decided)
+
+| Component | Host | Notes |
+|---|---|---|
+| PostgreSQL + Auth | **Supabase** (managed) | Use the connection pooler string for the API |
+| FastAPI backend | **Render** web service (free tier cold-starts; frontend must handle first-request latency) | Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT` from `backend/` |
+| Streamlit frontend | **Streamlit Community Cloud** | Entry: `frontend/app.py` |
+| Source | GitHub | CI via GitHub Actions |
+
+Docker is an optional later improvement (P1), not an MVP prerequisite.
+
+## 7.2 Environment variables
+
+| Variable | Service | Purpose |
+|---|---|---|
+| `DATABASE_URL` | backend | SQLAlchemy connection (SSL required) |
+| `SUPABASE_URL` | backend, frontend | Project URL / JWKS |
+| `SUPABASE_JWT_SECRET` (or JWKS) | backend | Token verification |
+| `CORS_ORIGINS` | backend | Allowed dashboard origin(s) |
+| `API_BASE_URL` | frontend | Deployed API URL |
+| `SUPABASE_ANON_KEY` | frontend | Public client key |
+
+Per-environment values live in each host's secret store, never in Git. Streamlit uses `secrets.toml` locally (git-ignored).
+
+## 7.3 Pre-deployment checklist
+
+- [ ] Google OAuth redirect URLs set for local and deployed origins (Supabase + Google Cloud)
+- [ ] Frontend points at deployed API URL
+- [ ] CORS limited to the dashboard origin
+- [ ] Secure DB connection (SSL) settings
+- [ ] `/health` check configured on the host
+- [ ] Secrets absent from client-visible code
+- [ ] Model artifact available to the API (committed small artifact or fetched at build)
+- [ ] Full sign-in → dashboard flow tested on the deployed stack
+
+## 7.4 CI (GitHub Actions)
+
+On push/PR: install `backend/requirements.txt` → `pytest backend/tests` → lint. Integration tests use a local/ephemeral Postgres service, not the production Supabase project.
+
+## 7.5 Migrations
+
+Alembic in `backend/migrations/`. Apply to staging before production; schema changes are backwards-compatible with the running API version where possible.
+
+## 7.6 Environments
+
+| Env | DB | Purpose |
+|---|---|---|
+| local | local Postgres or a dev Supabase project | development, tests |
+| prod | Supabase project | portfolio demo (synthetic data only) |
