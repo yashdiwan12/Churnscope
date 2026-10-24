@@ -1,7 +1,10 @@
 """Evaluation helpers: metrics, naive baselines, and error profiling. No fitting happens here."""
 
+import warnings
+
 import numpy as np
 import pandas as pd
+from sklearn.exceptions import UndefinedMetricWarning
 from sklearn.metrics import (
     average_precision_score,
     confusion_matrix,
@@ -15,7 +18,10 @@ from sklearn.metrics import (
 def _safe(fn, *args, **kwargs):
     """Metric as a float, or None when undefined (e.g. only one class present in y_true)."""
     try:
-        value = float(fn(*args, **kwargs))
+        with warnings.catch_warnings():  # the undefined case is expected and reported as None
+            warnings.simplefilter("ignore", UndefinedMetricWarning)
+            warnings.filterwarnings("ignore", message="No positive class found in y_true")
+            value = float(fn(*args, **kwargs))
     except ValueError:
         return None
     return None if np.isnan(value) else value

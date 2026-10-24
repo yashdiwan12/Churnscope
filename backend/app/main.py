@@ -2,11 +2,14 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import InterfaceError, OperationalError
 
 from app.api.routes import analytics, churn, health
 from app.core.config import get_settings
+from app.db.session import DatabaseUnavailable
 from app.ml import artifact
 
 logger = logging.getLogger("churnscope")
@@ -30,6 +33,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
+async def database_unavailable(request: Request, exc: Exception) -> JSONResponse:
+    """DB down or misconfigured -> 503 with a generic message (no connection details leak)."""
+    logger.error(
+        "database unavailable on %s %s: %s", request.method, request.url.path, type(exc).__name__
+    )
+    return JSONResponse(status_code=503, content={"detail": "Database unavailable"})
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="Churnscope API", version="0.1.0", lifespan=lifespan)
@@ -39,6 +50,8 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["Authorization", "Content-Type"],
     )
+    for exc_type in (DatabaseUnavailable, OperationalError, InterfaceError):
+        app.add_exception_handler(exc_type, database_unavailable)
     app.include_router(health.router)
     app.include_router(analytics.router)
     app.include_router(churn.router)

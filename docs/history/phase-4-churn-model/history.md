@@ -48,4 +48,6 @@ A code review of `backend/` found 10 issues; all verified and the following fixe
 - **503 not guaranteed:** the model dependency now resolves before the DB session, so a missing model is 503 even if the DB is misconfigured.
 - **`model_version` too narrow:** now hashes feature schema, windows, qualifying events and pipeline hyperparameters too; the data fingerprint now includes `properties`. Retrained: `churn-lr-131edb7229` -> `churn-lr-6f4625ce88`; the model file is byte-identical and all metrics are unchanged.
 - **Duplicate ids:** behaviour kept (answered once, first-seen order) and now documented in the request schema.
+- **Database outage gave a generic 500** (known gap, not from the review): added a `DatabaseUnavailable` error and handlers so DB failures return 503 `Database unavailable` without connection details; 10 s connect timeout. Tested for analytics and predict, with an unreachable and an unconfigured database (suite: 94 -> 101 tests).
+- Expected sklearn warnings for single-class metrics are now silenced inside the helper (the value is already reported as `null`). The remaining test warning is Starlette's `httpx` deprecation notice (third-party).
 - Not fixed here: `/churn/predict` (and analytics) are unauthenticated, which is Phase 5's job.

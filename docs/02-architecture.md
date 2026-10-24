@@ -64,9 +64,9 @@ flowchart LR
     r -. "5xx / 4xx" .-> resp([Response])
 ```
 
-## Failure behaviour `[Planned]`
+## Failure behaviour `[Built]` (token checks pending)
 
-Partly implemented. Built and tested: a missing or invalid model artifact returns 503 on `/churn/predict` while the rest of the API stays up, and a failed ingestion write is rolled back and never reported as success. Not yet: an unreachable database surfaces as a generic 500 rather than a 503, and there are no token checks.
+Built and tested: a missing or invalid model artifact returns 503 on `/churn/predict` while the rest of the API stays up; an unreachable or unconfigured database returns 503 `Database unavailable` (no connection details in the body) and `/health` stays up; a failed ingestion write is rolled back and never reported as success. Not yet: token checks (Phase 5) and frontend error states (Phase 6).
 
 | Failure | Behaviour |
 |---|---|

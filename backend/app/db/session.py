@@ -7,12 +7,16 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.config import get_settings
 
 
+class DatabaseUnavailable(RuntimeError):
+    """The database is not configured or cannot be reached. The API answers 503."""
+
+
 @lru_cache
 def get_engine() -> Engine:
     url = get_settings().database_url
     if not url:
-        raise RuntimeError("DATABASE_URL is not configured")
-    return create_engine(url, pool_pre_ping=True)
+        raise DatabaseUnavailable("DATABASE_URL is not configured")
+    return create_engine(url, pool_pre_ping=True, connect_args={"connect_timeout": 10})
 
 
 def get_session() -> Iterator[Session]:
