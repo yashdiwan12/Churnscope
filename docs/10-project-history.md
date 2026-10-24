@@ -5,9 +5,9 @@ Each phase maps to a milestone in [PLAN.md](../PLAN.md) and has its own log in `
 | Phase | Milestone | Goal | Exit criterion | Status | Log |
 |---|---|---|---|---|---|
 | 0 | Setup | Repo, env, scaffolding, dataset choice | Clean local setup, documented data source, no secrets in Git | Done | [log](history/phase-0-setup/history.md) |
-| 1 | Data & metric definitions | Data dictionary, metric/funnel/cohort rules, hand-checked examples | Assumptions documented and reproducible | Not started | [log](history/phase-1-data-and-metrics/history.md) |
-| 2 | Database & ingestion | Schema, SQLAlchemy, idempotent ingestion | Repeated ingestion creates no duplicates | Not started | [log](history/phase-2-database-and-ingestion/history.md) |
-| 3 | Analytics | Active users, funnel, retention, engagement + API | Endpoints correct vs hand-checked examples | Not started | [log](history/phase-3-analytics/history.md) |
+| 1 | Data & metric definitions | Data dictionary, metric/funnel/cohort rules, hand-checked examples | Assumptions documented and reproducible | Done | [log](history/phase-1-data-and-metrics/history.md) |
+| 2 | Database & ingestion | Schema, SQLAlchemy, idempotent ingestion | Repeated ingestion creates no duplicates | Done | [log](history/phase-2-database-and-ingestion/history.md) |
+| 3 | Analytics | Active users, funnel, retention, engagement + API | Endpoints correct vs hand-checked examples | Done | [log](history/phase-3-analytics/history.md) |
 | 4 | Churn model | Label, features, training, evaluation, inference | Reproducible eval, validated API inference | Not started | [log](history/phase-4-churn-model/history.md) |
 | 5 | Auth | Google OAuth, JWT verification, ownership | Cross-user access fails safely | Not started | [log](history/phase-5-auth/history.md) |
 | 6 | Dashboard | Streamlit pages wired to API | Core analytics flow works in UI | Not started | [log](history/phase-6-dashboard/history.md) |

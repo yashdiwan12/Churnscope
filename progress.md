@@ -11,7 +11,7 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 | 0 | Setup | ✅ Done | 10 / 10 |
 | 1 | Data & metric definitions | ✅ Done | 6 / 6 |
 | 2 | Database & ingestion | ✅ Done | 7 / 7 |
-| 3 | Analytics | ⬜ Not started | 0 / 6 |
+| 3 | Analytics | ✅ Done | 6 / 6 |
 | 4 | Churn model | ⬜ Not started | 0 / 8 |
 | 5 | Authentication & authorization | ⬜ Not started | 0 / 7 |
 | 6 | Dashboard | ⬜ Not started | 0 / 8 |
@@ -48,13 +48,13 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 - [x] Safe conflict handling (`ON CONFLICT DO NOTHING`)
 - [x] Read/write tests
 
-## Phase 3 — Analytics ⬜  ([history](docs/history/phase-3-analytics/history.md))
-- [ ] Active-user aggregation
-- [ ] Funnel calculation
-- [ ] Cohort retention
-- [ ] Engagement trends
-- [ ] Validate against hand-checked examples
-- [ ] Expose through FastAPI
+## Phase 3 — Analytics ✅  ([history](docs/history/phase-3-analytics/history.md))
+- [x] Active-user aggregation
+- [x] Funnel calculation
+- [x] Cohort retention
+- [x] Engagement trends
+- [x] Validate against hand-checked examples
+- [x] Expose through FastAPI (open until Phase 5 adds auth)
 
 ## Phase 4 — Churn model ⬜  ([history](docs/history/phase-4-churn-model/history.md))
 - [ ] Document label and horizon

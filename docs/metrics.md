@@ -36,9 +36,29 @@ Steps: `signup -> onboarding_complete -> report_created` (the "first key action"
 - **Retained in period k:** >= 1 qualifying event in that period.
 - **Eligibility:** a customer counts toward period k only once the whole period has elapsed at `as_of`. Each cell reports `cohort_size`, `eligible`, `retained`, and `retention = retained / eligible`; NaN when `eligible = 0` (incomplete, shown as such in the UI).
 
-## Engagement (defined now, implemented in Phase 3)
+## Engagement
 
-Active days per active user, qualifying events per active user, feature adoption (share of active users using each `properties.feature`), returning-user rate, median time between qualifying activities. Raw event volume is never presented alone.
+Computed for customers active in `[start, end)`:
+
+- **Active days per user:** mean and median count of distinct UTC days with a qualifying event.
+- **Events per active user:** qualifying events / active users.
+- **Feature adoption:** share of *active users* (not events) with >= 1 `feature_used` event for each `properties.feature`.
+- **Median hours between activities:** median gap between a customer's consecutive qualifying events, over customers with >= 2 events (`null` if none).
+- **New users:** signups in the window. **Returning users:** active in the window and signed up before `start`; returning-user rate = returning / active. Customers with no signup event are neither.
+- Raw event volume is never presented alone.
+
+## API (`/analytics/*`)
+
+Windows are `[start, end)`, tz-aware (naive timestamps -> 422), max 366 days; default is the 30 days ending the day after the latest event. Every response reports `data_through` (latest event in the database). Funnel and retention are right-censored at `data_through`, not at the wall clock, so a stale dataset is not mistaken for dropped-off users.
+
+| Endpoint | Parameters | Notes |
+|---|---|---|
+| `GET /analytics/overview` | `start`, `end` | active / new / returning users, qualifying events, daily active users |
+| `GET /analytics/funnel` | `start`, `end`, `window_days` (1-90, default 14) | customers who *signed up* in the window |
+| `GET /analytics/retention` | `periods` (1-26, default 8) | all signup-week cohorts; cells carry `eligible` and `complete` |
+| `GET /analytics/engagement` | `start`, `end` | see above |
+
+Empty data returns zeros / `null` rates, not errors. These endpoints are **not authenticated yet** (Phase 5).
 
 ## Churn label (decided in Phase 4)
 

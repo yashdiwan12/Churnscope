@@ -149,3 +149,107 @@ def cohort_retention(
                 }
             )
     return pd.DataFrame(rows).sort_values(["cohort", "period"]).reset_index(drop=True)
+
+
+def _qualifying_in_window(
+    events: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp, qualifying: Sequence[str]
+) -> pd.DataFrame:
+    ts = events["event_timestamp"]
+    return events[events["event_name"].isin(qualifying) & (ts >= start) & (ts < end)]
+
+
+def new_users(events: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> int:
+    """Distinct customers whose signup falls in [start, end)."""
+    validate_events(events)
+    ts = events["event_timestamp"]
+    mask = (events["event_name"] == "signup") & (ts >= start) & (ts < end)
+    return int(events.loc[mask, "customer_id"].nunique())
+
+
+def returning_users(
+    events: pd.DataFrame,
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+    qualifying: Sequence[str] = QUALIFYING_EVENTS,
+) -> int:
+    """Active users in [start, end) who signed up before ``start``.
+
+    Customers with no signup event on record are neither new nor returning here.
+    """
+    validate_events(events)
+    signup = (
+        events[events["event_name"] == "signup"].groupby("customer_id")["event_timestamp"].min()
+    )
+    active = _qualifying_in_window(events, start, end, qualifying)["customer_id"].unique()
+    return int((signup.reindex(active) < start).sum())
+
+
+def daily_active_users(
+    events: pd.DataFrame,
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+    qualifying: Sequence[str] = QUALIFYING_EVENTS,
+) -> pd.Series:
+    """Distinct active customers per UTC day in [start, end), zero-filled."""
+    validate_events(events)
+    act = _qualifying_in_window(events, start, end, qualifying)
+    days = pd.date_range(
+        start.floor("D"), (end - pd.Timedelta(microseconds=1)).floor("D"), freq="D"
+    )
+    counts = act.groupby(act["event_timestamp"].dt.floor("D"))["customer_id"].nunique()
+    out = counts.reindex(days, fill_value=0)
+    out.index = out.index.tz_localize(None).date
+    return out
+
+
+def engagement(
+    events: pd.DataFrame,
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+    qualifying: Sequence[str] = QUALIFYING_EVENTS,
+) -> dict:
+    """Engagement of the customers active in [start, end).
+
+    * active_days_per_user: mean/median distinct UTC days with a qualifying event
+    * events_per_active_user: mean qualifying events
+    * median_hours_between_activities: median gap between a customer's consecutive qualifying
+      events, over customers with >= 2 events (None if there are none)
+    * feature_adoption: share of active users with >= 1 ``feature_used`` event per
+      ``properties["feature"]`` (denominator = all active users)
+    """
+    validate_events(events)
+    act = _qualifying_in_window(events, start, end, qualifying)
+    n_active = int(act["customer_id"].nunique())
+    result: dict = {
+        "active_users": n_active,
+        "active_days_per_user_mean": None,
+        "active_days_per_user_median": None,
+        "events_per_active_user": None,
+        "median_hours_between_activities": None,
+        "feature_adoption": {},
+    }
+    if n_active == 0:
+        return result
+
+    days = (
+        act.assign(day=act["event_timestamp"].dt.floor("D")).groupby("customer_id")["day"].nunique()
+    )
+    result["active_days_per_user_mean"] = float(days.mean())
+    result["active_days_per_user_median"] = float(days.median())
+    result["events_per_active_user"] = float(len(act) / n_active)
+
+    gaps = (
+        act.sort_values("event_timestamp").groupby("customer_id")["event_timestamp"].diff().dropna()
+    )
+    if not gaps.empty:
+        result["median_hours_between_activities"] = float(gaps.median() / pd.Timedelta(hours=1))
+
+    if "properties" in act.columns:
+        used = act[act["event_name"] == "feature_used"]
+        feat = used["properties"].map(lambda p: p.get("feature") if isinstance(p, dict) else None)
+        pairs = pd.DataFrame({"customer_id": used["customer_id"], "feature": feat}).dropna()
+        by_feature = pairs.drop_duplicates().groupby("feature")["customer_id"].nunique()
+        result["feature_adoption"] = {
+            str(k): float(v / n_active) for k, v in by_feature.sort_values(ascending=False).items()
+        }
+    return result

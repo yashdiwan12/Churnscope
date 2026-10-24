@@ -115,3 +115,43 @@ def test_week_boundary_uses_utc_monday():
     ).assign(event_timestamp=lambda d: pd.to_datetime(d["event_timestamp"], utc=True))
     r = metrics.cohort_retention(ev, AS_OF, periods=1)
     assert sorted(r["cohort"].dt.strftime("%Y-%m-%d")) == ["2026-01-05", "2026-01-12"]
+
+
+def test_new_and_returning_users(events):
+    # window [01-12, 01-20): D signs up in it (new); active in it: A (session 01-13) only
+    assert metrics.new_users(events, T("2026-01-12"), T("2026-01-20")) == 1
+    assert metrics.returning_users(events, T("2026-01-12"), T("2026-01-20")) == 1  # A
+    # window [01-05, 01-20): everyone active signed up inside it -> none returning
+    assert metrics.returning_users(events, T("2026-01-05"), T("2026-01-20")) == 0
+
+
+def test_daily_active_users_zero_filled(events):
+    s = metrics.daily_active_users(events, T("2026-01-07"), T("2026-01-10"))
+    assert list(s.values) == [1, 2, 0]  # 07: B; 08: A, C; 09: none
+    assert len(s) == 3
+
+
+def test_engagement_hand_checked():
+    rows = [
+        ("A", "signup", "2026-01-01T00:00:00Z", {}),
+        ("A", "session_start", "2026-01-02T00:00:00Z", {}),
+        ("A", "feature_used", "2026-01-02T06:00:00Z", {"feature": "exports"}),
+        ("A", "feature_used", "2026-01-04T00:00:00Z", {"feature": "exports"}),
+        ("B", "feature_used", "2026-01-03T00:00:00Z", {"feature": "alerts"}),
+        ("C", "onboarding_complete", "2026-01-03T00:00:00Z", {}),  # not qualifying
+    ]
+    ev = pd.DataFrame(rows, columns=["customer_id", "event_name", "event_timestamp", "properties"])
+    ev["event_timestamp"] = pd.to_datetime(ev["event_timestamp"], utc=True)
+    e = metrics.engagement(ev, T("2026-01-01"), T("2026-01-10"))
+    assert e["active_users"] == 2  # A, B (C's only event does not qualify)
+    assert e["active_days_per_user_mean"] == pytest.approx(1.5)  # A: 01-02, 01-04 = 2; B: 1
+    assert e["events_per_active_user"] == pytest.approx(2.0)  # 4 events / 2 users
+    # gaps: A 6h and 42h; B none -> median of [6, 42] = 24
+    assert e["median_hours_between_activities"] == pytest.approx(24.0)
+    assert e["feature_adoption"] == {"exports": 0.5, "alerts": 0.5}
+
+
+def test_engagement_empty_window_is_all_none(events):
+    e = metrics.engagement(events, T("2030-01-01"), T("2030-02-01"))
+    assert e["active_users"] == 0 and e["events_per_active_user"] is None
+    assert e["feature_adoption"] == {}
