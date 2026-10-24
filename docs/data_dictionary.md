@@ -26,4 +26,27 @@ Validation done: `event_id` unique, names within the allow-list, timestamps tz-a
 
 ## IBM Telco Customer Churn (supplementary)
 
-Not yet downloaded or inspected. Source, licence note, and limitations are in [data/README.md](../data/README.md). Schema, missing values (e.g. blank `TotalCharges`), and duplicate checks are an open Phase 1 item; they need the CSV saved as `data/raw/telco_churn.csv`.
+Source, licence note, and limitations: [data/README.md](../data/README.md). Local copy `data/raw/telco_churn.csv` (git-ignored), downloaded 2026-10-24 from IBM's `telco-customer-churn-on-icp4d` GitHub repo. Inspected 2026-10-24.
+
+**Shape:** 7,043 rows x 21 columns, one row per customer. `customerID` unique; 0 duplicate rows; 0 null cells.
+
+| Column(s) | Type | Values / notes |
+|---|---|---|
+| customerID | string | unique |
+| gender, Partner, Dependents, PhoneService, PaperlessBilling | categorical | Yes/No (gender: Female/Male) |
+| SeniorCitizen | int | 0/1 (the only Yes/No-style column encoded as a number) |
+| tenure | int | months, 0-72 |
+| MultipleLines | categorical | No, Yes, No phone service |
+| InternetService | categorical | DSL, Fiber optic, No |
+| OnlineSecurity, OnlineBackup, DeviceProtection, TechSupport, StreamingTV, StreamingMovies | categorical | No, Yes, No internet service |
+| Contract | categorical | Month-to-month, One year, Two year |
+| PaymentMethod | categorical | 4 values |
+| MonthlyCharges | float | 18.25-118.75 |
+| TotalCharges | **string in the file** | 11 rows hold a blank space, so it loads as text. All 11 have `tenure = 0` and `Churn = No` (brand-new customers with no billing yet). Parse with `pd.to_numeric(errors="coerce")`, then set to 0 or impute inside the model pipeline, and document the choice in Phase 4. |
+| Churn | target | No 5,174 (73.46%), Yes 1,869 (26.54%) |
+
+**Implications**
+- Class imbalance is moderate (26.5% positive). A naive "always No" baseline scores 73.5% accuracy, so report precision, recall, F1 and ROC-AUC, not accuracy alone.
+- `No internet service` / `No phone service` are redundant with `InternetService` / `PhoneService`; encode deliberately to avoid duplicated signal.
+- `tenure`, `TotalCharges` and `MonthlyCharges` are related (`TotalCharges` ~ `tenure x MonthlyCharges`); watch collinearity in the Logistic Regression baseline.
+- No timestamps: stratified split only, labelled non-temporal (see `data/README.md`).

@@ -1,6 +1,6 @@
 # History — phase-1-data-and-metrics
 
-**Status:** in progress · **Started:** 2026-10-24
+**Status:** done · **Started:** 2026-10-24
 
 ## Done
 - `docs/metrics.md`: qualifying events, active users, funnel, cohort retention definitions.
@@ -18,5 +18,7 @@
 - `uv run pytest -q`: 10 passed; ruff check/format clean.
 - Smoke run on seed 42 (2,000 customers, 42,580 events) produced plausible funnel/retention output. These reflect generator assumptions, not real behaviour.
 
+- 2026-10-24: downloaded the Telco CSV (IBM GitHub repo) to `data/raw/telco_churn.csv` and inspected it: 7,043 x 21, unique IDs, no duplicates or nulls, 11 blank `TotalCharges` (all tenure 0), churn 26.54%. Findings and modelling implications are in `docs/data_dictionary.md`.
+
 ## Open items
-- Download the IBM Telco CSV to `data/raw/telco_churn.csv` and inspect schema, nulls, duplicates (needs manual download).
+None.

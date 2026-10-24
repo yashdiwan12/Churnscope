@@ -13,10 +13,10 @@ Raw and processed files are git-ignored (`data/raw/`, `data/processed/`). Nothin
 - **Purpose:** supplementary tabular churn classifier only.
 - **Origin:** IBM Cognos Analytics sample data. Copies: [Mendeley Data](https://data.mendeley.com/datasets/phsxg9ssrf) and Kaggle (`blastchar/telco-customer-churn`).
 - **Licence:** **not stated by IBM.** Community threads ask for it without an official answer. We do not commit or redistribute the file; use it for portfolio/educational purposes and check the terms on the host you download from.
-- **Download:** save the CSV as `data/raw/telco_churn.csv`.
-- **Shape (as reported by sources, to be verified in Phase 1):** ~7,043 customers, 21 columns, one row per customer, `Churn` Yes/No label.
+- **Download:** save the CSV as `data/raw/telco_churn.csv`. The copy used here came from IBM's GitHub repo: `https://raw.githubusercontent.com/IBM/telco-customer-churn-on-icp4d/master/data/Telco-Customer-Churn.csv`.
+- **Shape (verified 2026-10-24):** 7,043 customers, 21 columns, one row per customer, `Churn` Yes/No label (26.54% Yes). Field details: [docs/data_dictionary.md](../docs/data_dictionary.md).
 - **Known limitations:**
   - Static snapshot: no event timestamps, so **no temporal validation or funnel/retention claims** from this dataset.
-  - Possible data-quality quirks (e.g. blank `TotalCharges` for new customers) to be inspected in Phase 1.
+  - 11 rows have a blank `TotalCharges` (all `tenure = 0`, not churned), so the column loads as text.
   - Churn is a snapshot flag; no reliable prediction horizon.
 - **Evaluation method:** stratified train/test split, documented as non-temporal.

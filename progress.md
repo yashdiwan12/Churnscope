@@ -9,7 +9,7 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 | Phase | Milestone | Status | Done / Total |
 |---|---|---|---|
 | 0 | Setup | ✅ Done | 10 / 10 |
-| 1 | Data & metric definitions | 🟡 In progress | 5 / 6 |
+| 1 | Data & metric definitions | ✅ Done | 6 / 6 |
 | 2 | Database & ingestion | ✅ Done | 7 / 7 |
 | 3 | Analytics | ⬜ Not started | 0 / 6 |
 | 4 | Churn model | ⬜ Not started | 0 / 8 |
@@ -31,8 +31,8 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 
 **Exit:** clean local setup, documented data source, no secrets in Git.
 
-## Phase 1 — Data & metric definitions 🟡  ([history](docs/history/phase-1-data-and-metrics/history.md))
-- [ ] Inspect schema, types, missing values, duplicates, timestamps (synthetic log validated; Telco CSV still to download and inspect)
+## Phase 1 — Data & metric definitions ✅  ([history](docs/history/phase-1-data-and-metrics/history.md))
+- [x] Inspect schema, types, missing values, duplicates, timestamps (synthetic log validated; Telco CSV inspected)
 - [x] Write data dictionary
 - [x] Define qualifying activity events
 - [x] Define funnel steps and conversion rules
