@@ -1,10 +1,12 @@
 # 9. Local development
 
-> Commands below describe the target workflow; they become real as Phase 0/2 land. Tag changes in [history](10-project-history.md).
+> Backend setup, migrations, synthetic data, ingestion, analytics API and tests are real (Phases 0-3). Auth, churn prediction and the dashboard pages are still to come. Tag changes in [history](10-project-history.md).
 
 ## 9.1 Prerequisites
 
-Python 3.12, [uv](https://docs.astral.sh/uv/), Git, a Supabase project (or local Postgres), Google OAuth client configured in Supabase.
+Python 3.12, [uv](https://docs.astral.sh/uv/), Git, Docker (local Postgres for development and DB tests), and a Supabase project (used from Phase 2). A Google OAuth client configured in Supabase is needed from Phase 5.
+
+Supabase note: use the **Session pooler** connection string; the direct `db.<ref>.supabase.co` host is IPv6-only and may not resolve on home networks. Never point the test suite at Supabase: its fixture drops the `public` schema, so tests use `TEST_DATABASE_URL` (default: the local Docker database).
 
 ## 9.2 Setup
 

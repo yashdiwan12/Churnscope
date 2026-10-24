@@ -60,7 +60,9 @@ Offline training --> versioned model artifact --> ML inference
 | ML | `backend/app/ml/` | `train.py`, `evaluate.py`, artifacts | Run in the request path (training) |
 | Frontend | `frontend/` | Pages, API client, Plotly charts | Access DB or hold service keys |
 
-## Failure behaviour
+## Failure behaviour `[Planned]`
+
+Target behaviour. Not yet implemented: today an unreachable database surfaces as a generic 500 rather than a 503, and there are no token checks. Ingestion already guarantees that a failed write is rolled back and never reported as success.
 
 | Failure | Behaviour |
 |---|---|

@@ -17,24 +17,24 @@ Start with fewer modules if needed; split when it improves clarity or testabilit
 
 ## 3.2 API surface
 
-| Method | Endpoint | Auth | Purpose |
-|---|---|---|---|
-| GET | `/health` | none | Liveness (+ DB check) |
-| POST | `/events` | required | Validate and store events (batch) |
-| GET | `/analytics/overview` | required | Engagement summary |
-| GET | `/analytics/funnel` | required | Funnel conversion |
-| GET | `/analytics/retention` | required | Cohort retention |
-| GET | `/analytics/engagement` | required | Activity trends |
-| GET | `/customers/{customer_id}/insights` | required | Per-customer insights |
-| POST | `/churn/predict` | required | Churn-risk estimate |
-| GET/POST | `/me/reports` | required (P1) | List / save own reports |
-| DELETE | `/me/reports/{id}` | required (P1) | Delete own report |
+| Method | Endpoint | Auth | Purpose | Status |
+|---|---|---|---|---|
+| GET | `/health` | none | Liveness (+ DB check)  `[Built]` liveness only; DB check planned |
+| POST | `/events` | required | Validate and store events (batch)  `[In progress]` ingestion service built (Phase 2); HTTP route added with auth in Phase 5 |
+| GET | `/analytics/overview` | required | Engagement summary  `[Built]` open until Phase 5 |
+| GET | `/analytics/funnel` | required | Funnel conversion  `[Built]` open until Phase 5 |
+| GET | `/analytics/retention` | required | Cohort retention  `[Built]` open until Phase 5 |
+| GET | `/analytics/engagement` | required | Activity trends  `[Built]` open until Phase 5 |
+| GET | `/customers/{customer_id}/insights` | required | Per-customer insights  `[Planned]` |
+| POST | `/churn/predict` | required | Churn-risk estimate  `[Planned]` |
+| GET/POST | `/me/reports` | required (P1) | List / save own reports  `[Planned]` |
+| DELETE | `/me/reports/{id}` | required (P1) | Delete own report  `[Planned]` |
 
 Standards: Pydantic schemas everywhere; consistent error body; validated date ranges and pagination; no stack traces; timeouts on external calls; identity derived from the token only; OpenAPI generated and reviewed. Routes may change as the project evolves.
 
-## 3.3 Metric definitions
+## 3.3 Metric definitions `[Built]`
 
-Written **before** the dashboard. Final qualifying-event lists are fixed in Phase 1 and recorded in `data_dictionary` notes.
+Written **before** the dashboard. Final definitions are in [Metrics](metrics.md) `[Built]`; the event allow-list is in the [data dictionary](data_dictionary.md).
 
 | Metric | Definition |
 |---|---|
@@ -43,15 +43,15 @@ Written **before** the dashboard. Final qualifying-event lists are fixed in Phas
 | **Cohort retention** | Cohort = customers grouped by starting event (e.g. signup week). Retention(period k) = cohort members active in period k ÷ eligible original cohort size. Elapsed periods, not calendar; recent incomplete cohorts flagged. |
 | **Engagement** | Active days per user, qualifying events per active user, feature adoption, returning-user rate, time between meaningful activities. Raw volume alone is not value. |
 
-**Computation approach (decided):** grouping and counting run as SQL aggregations in Postgres; Pandas post-processes the (small) result sets into response shapes. Raw events are not loaded wholesale into memory, except for feature building in offline training.
+**Computation approach `[Built]`:** the repository fetches the needed event rows (SQL-side filter by window where possible, always excluding events after the window end) and `services/metrics.py` computes the metrics in Pandas. This is simple and hand-testable and is fine at the synthetic log's scale (~43k events), but funnel and retention read the full history on every request. If volume grows, move grouping/counting into SQL aggregations or cache results; measured latency is in the [Phase 3 log](history/phase-3-analytics/history.md). Churn feature building will also read events in bulk, offline.
 
 All timestamps stored UTC; day/week boundaries computed in UTC and stated in the UI.
 
-## 3.4 Ingestion pipeline
+## 3.4 Ingestion pipeline `[Built]` (service; route pending)
 
 1. Read source → 2. validate columns/types → 3. normalise timestamps (UTC) and IDs → 4. check missing/invalid → 5. validate event names and property types, cap payload size → 6. dedupe by `event_id` → 7. insert with `ON CONFLICT (event_id) DO NOTHING` in a transaction → 8. record rejected-row reasons (no sensitive data in logs).
 
-Response reports `accepted`, `duplicates`, `rejected` (with reasons).
+Result reports `received`, `inserted`, `duplicates`, and `rejected` (index + reason; payload values are never echoed). `[Built]` as `services/ingestion.py`; the HTTP route is not built yet.
 
 ## 3.5 Churn model design
 

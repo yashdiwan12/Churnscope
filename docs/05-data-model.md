@@ -24,7 +24,9 @@ user_profiles (Churnscope users)        customers (analysed product's users)
 
 `user_profiles` (people using Churnscope) are **deliberately separate** from `customers` (users of the product being analysed).
 
-## 5.3 Tables
+## 5.3 Tables `[Built]`
+
+Implemented in `backend/app/db/models.py`; created by Alembic migration `0001_initial_schema`; applied to local Postgres (Docker) and Supabase. `user_profiles`, `saved_reports` and `predictions` exist but nothing writes to them yet.
 
 ### `customers`
 | Column | Type | Notes |
@@ -83,4 +85,4 @@ Indexes (confirm with `EXPLAIN` on real queries): unique `event_id`; `(customer_
 }
 ```
 
-Validate identifiers, timestamps (timezone-aware), payload size, event names, and property types. Final allow-list fixed in Phase 1.
+Validate identifiers, timestamps (timezone-aware), payload size, event names, and property types. The allow-list is fixed in `services/metrics.py` (`EVENT_NAMES`) and listed in [Metrics](metrics.md); it is enforced in the application, not by a database CHECK, so adding a name needs no migration.

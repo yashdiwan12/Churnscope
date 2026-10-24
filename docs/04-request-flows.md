@@ -13,7 +13,9 @@ Streamlit: store token in session state (server-side), never in URL/logs
 
 On first authenticated API call the backend upserts a `user_profiles` row keyed by the token's `sub`.
 
-## 4.2 Protected analytics request
+## 4.2 Protected analytics request `[In progress]`
+
+The analytics endpoints exist (Phase 3) but are **unauthenticated until Phase 5**; the flow below is the target.
 
 ```
 Streamlit page -> FastAPI: GET /analytics/funnel?from=..&to=..   (Authorization: Bearer <jwt>)
@@ -27,17 +29,19 @@ Streamlit: render Plotly chart with labelled window + denominators
 
 Errors: 401 bad/missing token · 422 invalid params · 503 DB unavailable · timeout → UI error state.
 
-## 4.3 Event ingestion (idempotent)
+## 4.3 Event ingestion (idempotent) `[In progress]`
+
+The ingestion service and its tests are built; the `POST /events` route and its authentication arrive in Phase 5. `scripts/load_events.py` calls the service directly meanwhile. The response field names below are the target; the service currently returns `received / inserted / duplicates / rejected`.
 
 ```
 Client/loader -> FastAPI: POST /events  [ {event_id, customer_id, event_name, event_timestamp, properties}, ... ]
 FastAPI: authenticate, validate each event (schema, name allow-list, UTC timestamp, payload size)
 Service: split into valid / rejected(reason)
 Repository: BEGIN; INSERT ... ON CONFLICT (event_id) DO NOTHING; COMMIT
-FastAPI -> client: 200 { accepted, duplicates, rejected:[{index, reason}] }
+FastAPI -> client: 200 { received, inserted, duplicates, rejected:[{index, reason}] }
 ```
 
-Re-sending the same batch yields `accepted = 0`, `duplicates = n`. A DB failure rolls back and returns 5xx — never a success response.
+Re-sending the same batch yields `inserted = 0`, `duplicates = n`. A DB failure rolls back and returns 5xx — never a success response.
 
 ## 4.4 Churn prediction
 
