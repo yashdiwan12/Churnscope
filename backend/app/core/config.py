@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_jwt_secret: str = ""
     cors_origins: str = "http://localhost:8501"
+    # Optional trusted pin for the model artifact's SHA-256 (see app/ml/artifact.py).
+    churn_model_sha256: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -180,3 +180,68 @@ def test_serving_matches_training_features_exactly(session):
         assert 0.0 <= p["risk_score"] <= 1.0
     others = [p for p in body["predictions"] if p["status"] != "scored"]
     assert all(p["status"] == "not_eligible" for p in others)
+
+
+# ---------------------------------------------------------------- review fixes
+class FixedScore:
+    def __init__(self, score: float):
+        self.score = score
+
+    def predict_proba(self, x: pd.DataFrame) -> np.ndarray:
+        s = np.full(len(x), self.score)
+        return np.column_stack([1 - s, s])
+
+
+@pytest.mark.parametrize("raw", [0.49996, 0.49994, 0.5])
+def test_class_always_agrees_with_the_returned_score(session, raw):
+    ingest(session, ROWS)
+    bundle = ModelBundle(pipeline=FixedScore(raw), metadata=stub_bundle().metadata)
+    p = make_client(session, bundle).post("/churn/predict", json={"customer_ids": ["A"]}).json()
+    pred = p["predictions"][0]
+    assert (pred["risk_score"] >= p["decision_threshold"]) == (pred["predicted_class"] == "at_risk")
+
+
+def test_known_customer_without_any_events_is_not_eligible_not_unknown(session):
+    from datetime import UTC, datetime
+
+    from app.db.models import Customer
+
+    session.add(Customer(external_customer_id="A", created_at=datetime(2026, 1, 1, tzinfo=UTC)))
+    session.commit()
+    body = (
+        make_client(session, stub_bundle())
+        .post("/churn/predict", json={"customer_ids": ["A", "ghost"]})
+        .json()
+    )
+    assert body["cutoff"] is None  # no events: no fabricated wall-clock cutoff
+    p = {x["customer_id"]: x for x in body["predictions"]}
+    assert p["A"]["status"] == "not_eligible" and "no events" in p["A"]["reason"]
+    assert p["ghost"]["status"] == "unknown_customer"
+
+
+def test_missing_model_is_503_even_when_the_database_is_broken():
+    def broken_session():
+        raise RuntimeError("DATABASE_URL is not configured")
+        yield  # pragma: no cover
+
+    app = create_app()
+    app.dependency_overrides[get_session] = broken_session
+    app.state.model_bundle = None
+    r = TestClient(app, raise_server_exceptions=False).post(
+        "/churn/predict", json={"customer_ids": ["A"]}
+    )
+    assert r.status_code == 503
+
+
+def test_api_starts_and_serves_when_the_artifact_is_corrupt(session, tmp_path, monkeypatch):
+    from app.ml import artifact
+
+    (tmp_path / artifact.MODEL_FILE).write_bytes(b"garbage")
+    (tmp_path / artifact.META_FILE).write_text("[]")
+    monkeypatch.setattr(artifact, "ARTIFACT_DIR", tmp_path)
+    app = create_app()
+    app.dependency_overrides[get_session] = lambda: session
+    with TestClient(app) as c:  # runs the lifespan, which loads the model
+        assert app.state.model_bundle is None
+        assert c.get("/health").status_code == 200
+        assert c.post("/churn/predict", json={"customer_ids": ["A"]}).status_code == 503

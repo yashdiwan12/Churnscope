@@ -32,10 +32,10 @@ def predict(
 ) -> PredictResponse:
     cutoff = cutoff if cutoff is not None else default_cutoff(session)
     unique_ids = list(dict.fromkeys(customer_ids))  # drop repeats, keep request order
-    known = repositories.resolve_customers(session, unique_ids) if cutoff is not None else {}
+    known = repositories.resolve_customers(session, unique_ids)
 
     scores: dict[int, float] = {}
-    if known:
+    if known and cutoff is not None:  # cutoff is None only when no events exist at all
         events = repositories.load_events(session, until=cutoff, customer_ids=list(known.values()))
         x = features.build_features(events, [cutoff])
         if not x.empty:
@@ -53,23 +53,25 @@ def predict(
                 )
             )
         elif pk in scores:
-            score = float(scores[pk])
+            # Classify from the same rounded value we return, so the two fields always agree.
+            score = round(float(scores[pk]), 4)
             results.append(
                 CustomerPrediction(
                     customer_id=ext,
                     status="scored",
-                    risk_score=round(score, 4),
+                    risk_score=score,
                     predicted_class="at_risk" if score >= bundle.threshold else "not_at_risk",
                 )
             )
         else:
+            reason = _NOT_ELIGIBLE if cutoff is not None else "no events have been recorded yet"
             results.append(
-                CustomerPrediction(customer_id=ext, status="not_eligible", reason=_NOT_ELIGIBLE)
+                CustomerPrediction(customer_id=ext, status="not_eligible", reason=reason)
             )
 
     return PredictResponse(
         model_version=bundle.version,
-        cutoff=cutoff if cutoff is not None else pd.Timestamp.now("UTC").floor("D"),
+        cutoff=cutoff,
         window_days=features.WINDOW_DAYS,
         horizon_days=features.HORIZON_DAYS,
         decision_threshold=bundle.threshold,

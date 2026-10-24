@@ -60,7 +60,7 @@ PYTHONPATH=. uv run python -m app.ml.train --source db      # writes app/ml/arti
 PYTHONPATH=. uv run python -m app.ml.train_telco            # supplementary; needs data/raw/telco_churn.csv
 ```
 
-The API loads `app/ml/artifacts/churn_model.joblib` at startup (integrity-checked). Try it:
+The API loads `app/ml/artifacts/churn_model.joblib` at startup (hash, schema and version checked; optionally pinned with `CHURN_MODEL_SHA256`). Try it:
 
 ```bash
 curl -X POST localhost:8000/churn/predict -H 'Content-Type: application/json' -d '{"customer_ids": ["c00100", "c00275"]}'

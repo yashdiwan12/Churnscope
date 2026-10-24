@@ -1,12 +1,12 @@
 {
   "artifact_sha256": "317440fc90b00b78c23baada036c6f36fa2f21a27ecd2819ad3f1ff1423a2a7d",
-  "created_at": "2026-10-24T20:24:16+00:00",
+  "created_at": "2026-10-24T20:44:01+00:00",
   "data": {
     "first_event": "2026-01-01T04:18:34+00:00",
     "last_event": "2026-06-29T23:56:48.742967+00:00",
     "n_customers": 2000,
     "n_events": 42580,
-    "sha256": "c66dc05d310538e111c2e4a8906c6c326a839f812efd1d189ebcc08b4179c4f7",
+    "sha256": "84b0a39d6f8e5ae4010d3d39d62a059f34d32fb4be499d23bfd385d8bda8da87",
     "synthetic": true
   },
   "decision_threshold": 0.5,
@@ -41,7 +41,7 @@
     "window_days": 28
   },
   "model_type": "LogisticRegression(class_weight=balanced) on standardised features",
-  "model_version": "churn-lr-131edb7229",
+  "model_version": "churn-lr-6f4625ce88",
   "numpy_version": "2.5.4",
   "pandas_version": "3.1.0",
   "python_version": "3.14.3",

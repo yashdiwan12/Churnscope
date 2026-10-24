@@ -10,7 +10,11 @@ CustomerId = Annotated[str, Field(min_length=1, max_length=128, pattern=r"^[A-Za
 class PredictRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    customer_ids: list[CustomerId] = Field(min_length=1, max_length=MAX_CUSTOMERS_PER_REQUEST)
+    customer_ids: list[CustomerId] = Field(
+        min_length=1,
+        max_length=MAX_CUSTOMERS_PER_REQUEST,
+        description="Repeated ids are answered once, in first-seen order.",
+    )
 
 
 class CustomerPrediction(BaseModel):
@@ -23,7 +27,7 @@ class CustomerPrediction(BaseModel):
 
 class PredictResponse(BaseModel):
     model_version: str
-    cutoff: datetime  # predictions use only events before this instant
+    cutoff: datetime | None  # predictions use only events before this; None if no events exist
     window_days: int
     horizon_days: int
     decision_threshold: float

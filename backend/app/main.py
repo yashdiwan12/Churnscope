@@ -17,11 +17,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Load the model once. If it is missing or invalid the API still starts; only
     /churn/predict answers 503."""
     try:
-        app.state.model_bundle = artifact.load()
+        app.state.model_bundle = artifact.load(
+            artifact.ARTIFACT_DIR, expected_sha256=get_settings().churn_model_sha256 or None
+        )
         logger.info("loaded churn model %s", app.state.model_bundle.version)
     except artifact.ModelUnavailable as exc:
         app.state.model_bundle = None
         logger.warning("churn model unavailable: %s", exc)
+    except Exception:  # defence in depth: a model problem must never stop the whole API
+        app.state.model_bundle = None
+        logger.exception("unexpected error loading churn model")
     yield
 
 

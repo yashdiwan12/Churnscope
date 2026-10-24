@@ -24,6 +24,9 @@ def get_bundle(request: Request) -> ModelBundle:
 
 @router.post("/predict", response_model=PredictResponse)
 def predict(
-    body: PredictRequest, session: SessionDep, bundle: Annotated[ModelBundle, Depends(get_bundle)]
+    # The model check is declared first so a missing model is a 503 even if the DB is broken.
+    bundle: Annotated[ModelBundle, Depends(get_bundle)],
+    body: PredictRequest,
+    session: SessionDep,
 ) -> PredictResponse:
     return prediction.predict(session, bundle, body.customer_ids)

@@ -36,3 +36,16 @@
 ## Open items
 - Phase 5: authenticate `/churn/predict` and add per-user authorization.
 - Possible follow-ups (P1): threshold comparison, calibration, model explanations, persisting predictions, loading customer `plan`.
+
+## Code review fixes (2026-10-25)
+
+A code review of `backend/` found 10 issues; all verified and the following fixed, each with a regression test (suite: 76 -> 94 tests):
+
+- **Artifact trust overstated:** the model file is now read once and hashed over the exact bytes that are unpickled (no check/load race). Docs now say the co-located hash detects corruption, not an attacker; optional `CHURN_MODEL_SHA256` pin (env) is checked before unpickling.
+- **Bad artifact could stop the whole API:** `load()` now turns every failure (corrupt pickle, non-object or incomplete metadata, invalid threshold, numpy major mismatch, object without `predict_proba`) into `ModelUnavailable`; the lifespan also catches unexpected errors. Tested: API starts and `/health` works with a corrupt artifact; predict returns 503.
+- **`predicted_class` vs rounded `risk_score` could disagree:** the class is now derived from the rounded value returned.
+- **Known customers reported as "not found" when no events exist:** they are now `not_eligible`, and `cutoff` is `null` instead of a fabricated wall-clock date.
+- **503 not guaranteed:** the model dependency now resolves before the DB session, so a missing model is 503 even if the DB is misconfigured.
+- **`model_version` too narrow:** now hashes feature schema, windows, qualifying events and pipeline hyperparameters too; the data fingerprint now includes `properties`. Retrained: `churn-lr-131edb7229` -> `churn-lr-6f4625ce88`; the model file is byte-identical and all metrics are unchanged.
+- **Duplicate ids:** behaviour kept (answered once, first-seen order) and now documented in the request schema.
+- Not fixed here: `/churn/predict` (and analytics) are unauthenticated, which is Phase 5's job.

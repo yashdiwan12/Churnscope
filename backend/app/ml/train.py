@@ -52,9 +52,22 @@ class TrainResult:
 
 
 def data_fingerprint(events: pd.DataFrame) -> dict:
-    """Order-independent summary identifying the training data."""
-    cols = ["customer_id", "event_name", "event_timestamp"]
-    ordered = events[cols].astype({"customer_id": str}).sort_values(cols).reset_index(drop=True)
+    """Order-independent summary identifying the training data.
+
+    Covers every column the features read, including ``properties``. Customer ids are hashed as
+    given, so the same events loaded from the database (internal ids) and from CSV (external ids)
+    have different fingerprints.
+    """
+    cols = ["customer_id", "event_name", "event_timestamp", "properties"]
+    ordered = (
+        events[cols]
+        .assign(
+            customer_id=events["customer_id"].astype(str),
+            properties=events["properties"].map(lambda p: json.dumps(p, sort_keys=True)),
+        )
+        .sort_values(cols)
+        .reset_index(drop=True)
+    )
     digest = hashlib.sha256(pd.util.hash_pandas_object(ordered, index=False).values.tobytes())
     return {
         "n_events": len(events),
@@ -134,12 +147,21 @@ def train(events: pd.DataFrame, seed: int = 42, n_test: int = 4) -> TrainResult:
             strict=True,
         )
     )
-    params = {"seed": seed, "n_test": n_test, "threshold": DECISION_THRESHOLD}
+    # The version identifies everything that changes the model: data, split, threshold, feature
+    # schema and windows, qualifying events, and the pipeline's hyperparameters.
+    params = {
+        "data": fingerprint["sha256"],
+        "seed": seed,
+        "n_test": n_test,
+        "threshold": DECISION_THRESHOLD,
+        "feature_columns": features.FEATURE_COLUMNS,
+        "window_days": features.WINDOW_DAYS,
+        "horizon_days": features.HORIZON_DAYS,
+        "qualifying_events": list(QUALIFYING_EVENTS),
+        "pipeline": {k: repr(v) for k, v in shipped.get_params(deep=True).items()},
+    }
     version = (
-        "churn-lr-"
-        + hashlib.sha256(
-            json.dumps({"data": fingerprint["sha256"], **params}, sort_keys=True).encode()
-        ).hexdigest()[:10]
+        "churn-lr-" + hashlib.sha256(json.dumps(params, sort_keys=True).encode()).hexdigest()[:10]
     )
 
     split = {

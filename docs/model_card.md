@@ -9,7 +9,7 @@ Status: **[Built]** in `backend/app/ml/`, `backend/app/services/features.py`, `b
 | | |
 |---|---|
 | Task | Among customers active in the last 28 days, will they have **no qualifying activity in the next 14 days**? |
-| Shipped model | `churn-lr-131edb7229`: Logistic Regression (class-balanced) on 15 standardised behavioural features |
+| Shipped model | `churn-lr-6f4625ce88`: Logistic Regression (class-balanced) on 15 standardised behavioural features |
 | Test result | ROC-AUC **0.874**, precision 0.760, recall 0.738, F1 0.749 at threshold 0.5 (churn rate in test: 35.6%) |
 | Honest headline | It beats "always predict no churn" clearly, but **only marginally beats a one-line rule** ("last active 7 or more days ago"): F1 0.749 vs 0.742, ROC-AUC 0.874 vs 0.873 |
 | Served by | `POST /churn/predict` (unauthenticated until Phase 5) |
@@ -95,9 +95,11 @@ Accuracy barely moves over the majority baseline because of the class imbalance;
 ## Artifact and serving
 
 - Files: `backend/app/ml/artifacts/churn_model.joblib` (fitted pipeline, ~2 KB) and `churn_model.json` (version, feature schema, windows, label definition, data fingerprint, split, test metrics, seed, library versions, SHA-256 of the model file).
-- The API loads it once at startup. It **refuses** an artifact whose SHA-256, feature columns, window/horizon, or scikit-learn minor version does not match; then `/churn/predict` returns 503 `Churn model is unavailable` and the rest of the API keeps working. (Joblib files are pickles and can run code when loaded, so only artifacts we trained ourselves should ever be placed there.)
+- The API loads it once at startup. It **refuses** an artifact whose SHA-256, feature columns, window/horizon, scikit-learn minor or numpy major version does not match, whose metadata is malformed, or that cannot be unpickled; then `/churn/predict` returns 503 `Churn model is unavailable` and the rest of the API keeps working (tested with a corrupt artifact).
+- **What the hash does and does not protect.** Joblib files are pickles and can run code when loaded. The model file is read once and the hash is computed over exactly the bytes that are unpickled. The hash in `churn_model.json` sits next to the model, so it catches corruption and mismatches but **not** someone who can write to that folder. For that, set `CHURN_MODEL_SHA256` (from a trusted place such as the host's secret store); it is checked before anything is unpickled. Only artifacts we trained ourselves should ever be placed there.
+- The version (`churn-lr-…`) hashes the data fingerprint (all event columns, including `properties`), seed, split size, threshold, feature schema, windows, qualifying events and pipeline hyperparameters, so any of those changing gives a new version.
 - Serving builds features with the same `features.build_features` used in training (a test asserts API scores equal the pipeline's scores on directly built features).
-- Prediction cutoff is the start of the day after the latest event. A customer with no qualifying activity in the prior 28 days is returned as `not_eligible`, not scored; unknown ids as `unknown_customer`. Predictions are not stored (the `predictions` table is unused so far).
+- Prediction cutoff is the start of the day after the latest event (`null` if no events exist yet). A customer with no qualifying activity in the prior 28 days is returned as `not_eligible`, not scored; unknown ids as `unknown_customer`; repeated ids are answered once. `predicted_class` is derived from the same rounded `risk_score` that is returned, so the two never disagree. Predictions are not stored (the `predictions` table is unused so far).
 - Measured latency (single runs to the Seoul-region Supabase pooler, not benchmarks): about 1 s for one customer, about 4 s for 17 customers on a first call that included connection setup.
 
 ## Limitations
@@ -117,4 +119,4 @@ PYTHONPATH=. uv run python -m app.ml.train_telco              # needs data/raw/t
 uv run pytest -q tests/test_features.py tests/test_ml.py tests/test_churn_api.py tests/test_train_telco.py
 ```
 
-The same seed and data give the same `model_version`, test metrics, and coefficients (tested). Random Forest figures can move in the third decimal if the row order of the input changes; Logistic Regression does not.
+The same seed and data give the same `model_version`, test metrics, and coefficients (tested). Training from the database and from the CSV gives identical metrics but different versions, because the fingerprint hashes customer ids as given (internal ids vs external ids). Random Forest figures can move in the third decimal if the row order of the input changes; Logistic Regression does not.

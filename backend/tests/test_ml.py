@@ -145,3 +145,84 @@ def test_incompatible_metadata_is_rejected(saved, key, value, message):
     (directory / artifact.META_FILE).write_text(json.dumps({**meta, key: value}))
     with pytest.raises(artifact.ModelUnavailable, match=message):
         artifact.load(directory)
+
+
+# ---------------------------------------------------------------- review fixes
+def test_pinned_hash_mismatch_is_rejected_before_unpickling(saved):
+    directory, _ = saved
+    with pytest.raises(artifact.ModelUnavailable, match="pinned"):
+        artifact.load(directory, expected_sha256="0" * 64)
+
+
+def test_pinned_hash_match_loads(saved):
+    directory, meta = saved
+    assert artifact.load(directory, expected_sha256=meta["artifact_sha256"].upper()).version
+
+
+def _rewrite(directory, model_bytes: bytes, meta: dict) -> None:
+    import hashlib
+
+    (directory / artifact.MODEL_FILE).write_bytes(model_bytes)
+    meta = {**meta, "artifact_sha256": hashlib.sha256(model_bytes).hexdigest()}
+    (directory / artifact.META_FILE).write_text(json.dumps(meta))
+
+
+def test_corrupt_pickle_with_matching_hash_is_unavailable_not_a_crash(saved):
+    directory, meta = saved
+    _rewrite(directory, b"definitely not a pickle", meta)
+    with pytest.raises(artifact.ModelUnavailable, match="unpickled"):
+        artifact.load(directory)
+
+
+def test_artifact_without_predict_proba_is_rejected(saved):
+    import io
+
+    import joblib
+
+    directory, meta = saved
+    buf = io.BytesIO()
+    joblib.dump({"not": "a model"}, buf)
+    _rewrite(directory, buf.getvalue(), meta)
+    with pytest.raises(artifact.ModelUnavailable, match="predict_proba"):
+        artifact.load(directory)
+
+
+@pytest.mark.parametrize(
+    "mutate,message",
+    [
+        (lambda m: [m], "not a JSON object"),
+        (lambda m: {k: v for k, v in m.items() if k != "model_version"}, "model_version"),
+        (lambda m: {**m, "decision_threshold": "0.5"}, "decision_threshold"),
+        (lambda m: {**m, "decision_threshold": 1.5}, "decision_threshold"),
+        (lambda m: {**m, "sklearn_version": 1}, "scikit-learn"),
+        (lambda m: {**m, "numpy_version": "0.1"}, "numpy"),
+    ],
+)
+def test_malformed_metadata_is_unavailable_not_a_crash(saved, mutate, message):
+    directory, meta = saved
+    (directory / artifact.META_FILE).write_text(json.dumps(mutate(meta)))
+    with pytest.raises(artifact.ModelUnavailable, match=message):
+        artifact.load(directory)
+
+
+def test_model_version_changes_with_hyperparameters(events, result, monkeypatch):
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import StandardScaler
+
+    def other(seed):
+        clf = LogisticRegression(C=0.1, class_weight="balanced", max_iter=1000, random_state=seed)
+        return Pipeline([("scale", StandardScaler()), ("clf", clf)])
+
+    monkeypatch.setattr(train, "make_logistic", other)
+    assert (
+        train.train(events, seed=42, n_test=3).metadata["model_version"]
+        != result.metadata["model_version"]
+    )
+
+
+def test_fingerprint_covers_event_properties(events):
+    changed = events.copy()
+    i = changed.index[changed["event_name"] == "feature_used"][0]
+    changed.at[i, "properties"] = {"feature": "something_else"}
+    assert train.data_fingerprint(changed)["sha256"] != train.data_fingerprint(events)["sha256"]
