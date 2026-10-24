@@ -1,0 +1,14 @@
+# Local Postgres for development and DB tests. Not used in production (Supabase).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: churnscope
+      POSTGRES_PASSWORD: churnscope
+      POSTGRES_DB: churnscope
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U churnscope"]
+      interval: 2s
+      retries: 20

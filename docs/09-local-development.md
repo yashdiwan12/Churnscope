@@ -28,8 +28,12 @@ cd frontend && uv run streamlit run app.py                       # http://localh
 ## 9.4 Data
 
 ```bash
-python -m app.scripts.generate_events --seed 42   # synthetic events (planned)
-python -m app.scripts.load_events                  # idempotent load
+docker compose up -d --wait                        # local Postgres on :5433
+cd backend
+export DATABASE_URL=postgresql+psycopg://churnscope:churnscope@localhost:5433/churnscope
+uv run alembic upgrade head                        # create schema
+uv run python scripts/generate_events.py --seed 42 # synthetic events -> data/processed/
+PYTHONPATH=. uv run python scripts/load_events.py ../data/processed/events.csv   # idempotent load
 ```
 
 Public churn dataset: download per `data/README.md` into `data/raw/` (git-ignored).
@@ -37,7 +41,7 @@ Public churn dataset: download per `data/README.md` into `data/raw/` (git-ignore
 ## 9.5 Tests
 
 ```bash
-cd backend && uv run pytest -q
+cd backend && uv run pytest -q   # DB tests need `docker compose up -d`; they skip otherwise
 cd backend && uv run ruff check . && uv run ruff format --check .
 ```
 

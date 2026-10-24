@@ -10,7 +10,7 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 |---|---|---|---|
 | 0 | Setup | ✅ Done | 10 / 10 |
 | 1 | Data & metric definitions | 🟡 In progress | 5 / 6 |
-| 2 | Database & ingestion | ⬜ Not started | 0 / 7 |
+| 2 | Database & ingestion | 🟡 In progress | 6 / 7 |
 | 3 | Analytics | ⬜ Not started | 0 / 6 |
 | 4 | Churn model | ⬜ Not started | 0 / 8 |
 | 5 | Authentication & authorization | ⬜ Not started | 0 / 7 |
@@ -39,14 +39,14 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 - [x] Define cohort and retention periods
 - [x] Validate metrics on hand-checkable examples
 
-## Phase 2 — Database & ingestion ⬜  ([history](docs/history/phase-2-database-and-ingestion/history.md))
-- [ ] Supabase project and PostgreSQL schema
-- [ ] SQLAlchemy configured with driver
-- [ ] Tables, constraints, initial indexes (Alembic)
-- [ ] Ingestion service
-- [ ] Event validation and deduplication
-- [ ] Safe conflict handling (`ON CONFLICT DO NOTHING`)
-- [ ] Read/write tests
+## Phase 2 — Database & ingestion 🟡  ([history](docs/history/phase-2-database-and-ingestion/history.md))
+- [ ] Supabase project and PostgreSQL schema (schema done and verified on local Postgres via Docker; Supabase project still to be created by the user)
+- [x] SQLAlchemy configured with driver
+- [x] Tables, constraints, initial indexes (Alembic)
+- [x] Ingestion service
+- [x] Event validation and deduplication
+- [x] Safe conflict handling (`ON CONFLICT DO NOTHING`)
+- [x] Read/write tests
 
 ## Phase 3 — Analytics ⬜  ([history](docs/history/phase-3-analytics/history.md))
 - [ ] Active-user aggregation
