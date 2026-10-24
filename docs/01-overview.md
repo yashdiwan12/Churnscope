@@ -1,7 +1,7 @@
 # 1. Overview
 
 > **Status legend** used across all docs: `[Planned]` designed, not built · `[In progress]` · `[Built]` implemented and tested.
-> Phases 0-3 are `[Built]` (setup, data and metric definitions, database and ingestion, analytics API). Everything else is `[Planned]`. Update tags as phases complete (see [History](10-project-history.md)).
+> Phases 0-4 are `[Built]` (setup, data and metric definitions, database and ingestion, analytics API, churn model and inference). Everything else is `[Planned]`. Update tags as phases complete (see [History](10-project-history.md)).
 
 ## What Churnscope is
 

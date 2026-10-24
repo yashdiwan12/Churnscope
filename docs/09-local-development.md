@@ -1,6 +1,6 @@
 # 9. Local development
 
-> Backend setup, migrations, synthetic data, ingestion, analytics API and tests are real (Phases 0-3). Auth, churn prediction and the dashboard pages are still to come. Tag changes in [history](10-project-history.md).
+> Backend setup, migrations, synthetic data, ingestion, analytics API, churn model training and the prediction endpoint are real (Phases 0-4). Auth and the dashboard pages are still to come. Tag changes in [history](10-project-history.md).
 
 ## 9.1 Prerequisites
 
@@ -51,6 +51,20 @@ PYTHONPATH=. uv run python scripts/load_events.py ../data/processed/events.csv  
 ```
 
 Public churn dataset: download per `data/README.md` into `data/raw/` (git-ignored).
+
+## 9.4b Train the churn model
+
+```bash
+cd backend
+PYTHONPATH=. uv run python -m app.ml.train --source db      # writes app/ml/artifacts/ and app/ml/reports/churn_eval.json
+PYTHONPATH=. uv run python -m app.ml.train_telco            # supplementary; needs data/raw/telco_churn.csv
+```
+
+The API loads `app/ml/artifacts/churn_model.joblib` at startup (integrity-checked). Try it:
+
+```bash
+curl -X POST localhost:8000/churn/predict -H 'Content-Type: application/json' -d '{"customer_ids": ["c00100", "c00275"]}'
+```
 
 ## 9.5 Tests
 

@@ -4,7 +4,7 @@ Product analytics and churn-intelligence platform: turns user-activity events in
 
 ## Status
 
-Phases 0-3 are done (setup, data and metric definitions, database and idempotent ingestion, analytics API). Churn model, authentication, dashboard, and deployment are still to come. Live tracker: [progress.md](progress.md).
+Phases 0-4 are done (setup, data and metric definitions, database and idempotent ingestion, analytics API, churn model with inference endpoint; see the [model card](docs/model_card.md) for measured results and limitations). Authentication, dashboard, and deployment are still to come. Live tracker: [progress.md](progress.md).
 
 The event data is **synthetic** (seeded generator); funnel and retention figures reflect its assumptions, not real customer behaviour. The IBM Telco dataset is used only as a supplementary tabular churn dataset (see [data/README.md](data/README.md)).
 
@@ -17,6 +17,7 @@ cd backend && uv sync
 uv run alembic upgrade head
 uv run python scripts/generate_events.py               # synthetic events -> data/processed/
 PYTHONPATH=. uv run python scripts/load_events.py ../data/processed/events.csv
+PYTHONPATH=. uv run python -m app.ml.train --source db # train churn model -> app/ml/artifacts/
 uv run uvicorn app.main:app --reload                   # API docs at http://localhost:8000/docs
 uv run pytest -q
 ```

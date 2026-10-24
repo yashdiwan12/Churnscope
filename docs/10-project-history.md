@@ -14,8 +14,8 @@ flowchart LR
     p3 --> p6
     p4 --> p6
 
-    class p0,p1,p2,p3 built
-    class p4,p5,p6,p7 planned
+    class p0,p1,p2,p3,p4 built
+    class p5,p6,p7 planned
     classDef built fill:#d1fae5,stroke:#059669,color:#064e3b
     classDef planned fill:#f3f4f6,stroke:#9ca3af,stroke-dasharray: 5 3,color:#374151
 ```
@@ -28,7 +28,7 @@ flowchart LR
 | 1 | Data & metric definitions | Data dictionary, metric/funnel/cohort rules, hand-checked examples | Assumptions documented and reproducible | Done | [log](history/phase-1-data-and-metrics/history.md) |
 | 2 | Database & ingestion | Schema, SQLAlchemy, idempotent ingestion | Repeated ingestion creates no duplicates | Done | [log](history/phase-2-database-and-ingestion/history.md) |
 | 3 | Analytics | Active users, funnel, retention, engagement + API | Endpoints correct vs hand-checked examples | Done | [log](history/phase-3-analytics/history.md) |
-| 4 | Churn model | Label, features, training, evaluation, inference | Reproducible eval, validated API inference | Not started | [log](history/phase-4-churn-model/history.md) |
+| 4 | Churn model | Label, features, training, evaluation, inference | Reproducible eval, validated API inference | Done | [log](history/phase-4-churn-model/history.md) |
 | 5 | Auth | Google OAuth, JWT verification, ownership | Cross-user access fails safely | Not started | [log](history/phase-5-auth/history.md) |
 | 6 | Dashboard | Streamlit pages wired to API | Core analytics flow works in UI | Not started | [log](history/phase-6-dashboard/history.md) |
 | 7 | Quality & docs | Tests, security review, screenshots, deploy | New developer can follow README end to end | Not started | [log](history/phase-7-quality-and-docs/history.md) |

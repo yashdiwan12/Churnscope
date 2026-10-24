@@ -1,0 +1,120 @@
+# Model card: churn risk
+
+Status: **[Built]** in `backend/app/ml/`, `backend/app/services/features.py`, `backend/app/services/prediction.py`. Numbers below are copied from `backend/app/ml/reports/churn_eval.json` and `telco_eval.json`, produced by the commands in [Reproducing](#reproducing).
+
+> **Everything here is measured on synthetic data.** The event log comes from a seeded generator in which customers stop being active after a random "churn week". Results show how well the pipeline recovers that behaviour, **not** how well it would predict real customers.
+
+## Summary
+
+| | |
+|---|---|
+| Task | Among customers active in the last 28 days, will they have **no qualifying activity in the next 14 days**? |
+| Shipped model | `churn-lr-131edb7229`: Logistic Regression (class-balanced) on 15 standardised behavioural features |
+| Test result | ROC-AUC **0.874**, precision 0.760, recall 0.738, F1 0.749 at threshold 0.5 (churn rate in test: 35.6%) |
+| Honest headline | It beats "always predict no churn" clearly, but **only marginally beats a one-line rule** ("last active 7 or more days ago"): F1 0.749 vs 0.742, ROC-AUC 0.874 vs 0.873 |
+| Served by | `POST /churn/predict` (unauthenticated until Phase 5) |
+
+## Label and population
+
+For a **cutoff** `t` (weekly, midnight UTC) and a customer:
+
+- **Eligible** if they signed up before `t` and had at least one qualifying event (`session_start`, `feature_used`, `report_created`, `report_shared`) in `[t - 28d, t)`. A customer already silent for 28 days has already churned and is not scored.
+- **Label** `churn = 1` if they have **no** qualifying event in `[t, t + 14d)`, else 0.
+- Cutoffs run weekly from 28 days after the first event until the last one whose 14-day horizon is fully observed in the data.
+
+Timeline diagram: [System design 3.5](03-system-design.md). Qualifying events: [Metrics](metrics.md).
+
+## Features
+
+All computed from events in `[t - 28d, t)` plus first-occurrence times strictly before `t` (`features.py`). Windows are half-open, so an event exactly at `t` is a label event, never a feature.
+
+| Feature | Definition |
+|---|---|
+| `days_since_last_activity` | days from the last qualifying event to `t` |
+| `active_days_28d`, `active_days_14d` | distinct UTC days with a qualifying event in the last 28 / 14 days |
+| `events_28d` | qualifying events in the window |
+| `sessions_28d`, `features_used_28d`, `reports_created_28d`, `reports_shared_28d` | counts by event type |
+| `events_last_14d`, `events_prev_14d` | qualifying events in the recent and earlier half of the window |
+| `activity_change` | `(last14 - prev14) / (last14 + prev14)`, in [-1, 1] |
+| `distinct_features_28d` | distinct `properties.feature` values used |
+| `onboarding_complete`, `has_created_report` | 1 if the first such event happened before `t` |
+| `account_age_days` | days from signup to `t` |
+
+Not used: `plan` (the customer table has no plan loaded for the synthetic data, and the generator does not make behaviour depend on it).
+
+## Evaluation design
+
+- **Time-based split by cutoff:** the last 4 weekly cutoffs are test (2026-05-21 to 2026-06-11, 3,494 rows); training uses earlier cutoffs (2026-01-29 to 2026-05-07, 9,572 rows). The cutoff 2026-05-14 is dropped so every training label's 14-day horizon closes by the first test cutoff.
+- Preprocessing (standardisation) is fitted **inside the pipeline on training rows only**; a test checks this.
+- Nothing is tuned or selected on the test set. Logistic Regression was chosen up front as the interpretable baseline; Random Forest and two naive baselines are reported for comparison on the same rows.
+- **Caveat:** the same customers appear in train and test at different cutoffs, so this measures generalisation over time, not to unseen customers.
+- Class balance: 34.9% churn in train, 35.6% in test (moderate imbalance). Models use class weighting, so scores are **relative risk scores, not calibrated probabilities**.
+
+## Results (test set, threshold 0.5)
+
+| Model | Accuracy | Precision | Recall | F1 | ROC-AUC | PR-AUC |
+|---|---|---|---|---|---|---|
+| **Logistic Regression (shipped)** | 0.823 | 0.760 | 0.738 | 0.749 | 0.874 | 0.835 |
+| Random Forest | 0.821 | 0.751 | 0.745 | 0.748 | 0.883 | 0.836 |
+| Baseline: last active >= 7 days ago | 0.825 | 0.783 | 0.705 | 0.742 | 0.873 | 0.829 |
+| Baseline: always "no churn" | 0.644 | 0.000 | 0.000 | 0.000 | 0.500 | 0.356 |
+
+Logistic Regression confusion matrix: TN 1,958 · FP 291 · FN 326 · TP 919.
+
+What this does and does not show:
+
+- Accuracy alone is misleading here: always predicting "no churn" already scores 64.4%.
+- On this synthetic data **one feature (`days_since_last_activity`) carries almost all the signal**; the 15-feature model adds very little over the simple rule. Random Forest is similar (0.883 vs 0.874 ROC-AUC, within what small changes in row order move it) and overfits: train ROC-AUC 0.963 vs test 0.883, while Logistic Regression shows no gap (0.884 train vs 0.874 test).
+- Logistic Regression's standardised coefficient for `days_since_last_activity` is +2.11, far larger than any other. Several features are strongly correlated (`activity_change`, `events_last_14d`, `events_prev_14d`, `active_days_*`), so the signs of their individual coefficients are **not** reliable explanations.
+
+## Error review
+
+Mean feature values by outcome for the shipped model (full table in `churn_eval.json`):
+
+| Group | n | days since last activity | events (28d) | active days (14d) |
+|---|---|---|---|---|
+| False negative (missed churn) | 326 | 2.8 | 8.5 | 3.8 |
+| False positive (false alarm) | 291 | 10.8 | 4.6 | 1.6 |
+| True positive | 919 | 16.8 | 5.1 | 0.8 |
+| True negative | 1,958 | 1.7 | 11.8 | 5.0 |
+
+Missed churners look like healthy, recently active customers who then went silent; that is behaviour no feature can foresee in this generator (a customer's activity stops abruptly at a random week). False alarms are customers who were quiet for about 11 days but came back within the horizon.
+
+## Supplementary: IBM Telco classifier
+
+A separate tabular classifier on the static Telco snapshot (`backend/app/ml/train_telco.py`), **not served by the API**. The data has no timestamps, so it uses a stratified random 80/20 split (5,634 train / 1,409 test, 26.5% churn in both) and makes **no temporal or horizon claims**.
+
+| Model | Accuracy | Precision | Recall | F1 | ROC-AUC |
+|---|---|---|---|---|---|
+| Logistic Regression | 0.738 | 0.504 | 0.783 | 0.614 | 0.842 |
+| Random Forest | 0.775 | 0.563 | 0.684 | 0.618 | 0.837 |
+| Always "no churn" | 0.735 | 0.000 | 0.000 | 0.000 | 0.500 |
+
+Accuracy barely moves over the majority baseline because of the class imbalance; compare ROC-AUC and recall instead. Blank `TotalCharges` (11 rows, all `tenure = 0`) are set to 0, since nothing has been billed yet; the loader refuses blanks for customers with tenure above 0. Licence and provenance: [data/README.md](../data/README.md).
+
+## Artifact and serving
+
+- Files: `backend/app/ml/artifacts/churn_model.joblib` (fitted pipeline, ~2 KB) and `churn_model.json` (version, feature schema, windows, label definition, data fingerprint, split, test metrics, seed, library versions, SHA-256 of the model file).
+- The API loads it once at startup. It **refuses** an artifact whose SHA-256, feature columns, window/horizon, or scikit-learn minor version does not match; then `/churn/predict` returns 503 `Churn model is unavailable` and the rest of the API keeps working. (Joblib files are pickles and can run code when loaded, so only artifacts we trained ourselves should ever be placed there.)
+- Serving builds features with the same `features.build_features` used in training (a test asserts API scores equal the pipeline's scores on directly built features).
+- Prediction cutoff is the start of the day after the latest event. A customer with no qualifying activity in the prior 28 days is returned as `not_eligible`, not scored; unknown ids as `unknown_customer`. Predictions are not stored (the `predictions` table is unused so far).
+- Measured latency (single runs to the Seoul-region Supabase pooler, not benchmarks): about 1 s for one customer, about 4 s for 17 customers on a first call that included connection setup.
+
+## Limitations
+
+- Synthetic data; the churn mechanism is the generator's, so absolute numbers say nothing about real products.
+- Weak evidence that the model adds value beyond a simple inactivity rule.
+- Scores are uncalibrated; the 0.5 threshold is a default, not tuned to any cost trade-off (threshold comparison is a P1 item).
+- Same customers in train and test (different times). No fairness or subgroup analysis: the data has no demographic attributes.
+- Weekly cutoffs overlap in time for a customer, so rows are correlated; no confidence intervals are reported.
+
+## Reproducing
+
+```bash
+cd backend
+PYTHONPATH=. uv run python -m app.ml.train --source db        # or: --source csv --csv-dir ../data/processed
+PYTHONPATH=. uv run python -m app.ml.train_telco              # needs data/raw/telco_churn.csv
+uv run pytest -q tests/test_features.py tests/test_ml.py tests/test_churn_api.py tests/test_train_telco.py
+```
+
+The same seed and data give the same `model_version`, test metrics, and coefficients (tested). Random Forest figures can move in the third decimal if the row order of the input changes; Logistic Regression does not.

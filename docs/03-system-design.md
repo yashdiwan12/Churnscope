@@ -22,7 +22,7 @@ flowchart TD
     main["main.py<br/>app factory, CORS"] --> health["routes/health"]
     main --> ar["routes/analytics"]
     main -.-> er["routes/events"]
-    main -.-> cr["routes/churn"]
+    main --> cr["routes/churn"]
     main -.-> rr["routes/reports"]
     ar --> asv["services/analytics"]
     asv --> repo["db/repositories"]
@@ -34,14 +34,15 @@ flowchart TD
     repo --> mod
     repo --> ses["db/session"]
     ses --> cfg["core/config"]
-    cr -.-> pred["services/prediction"]
-    pred -.-> feat["services/features"]
-    pred -.-> art[["ml/artifacts"]]
+    cr --> pred["services/prediction"]
+    pred --> feat["services/features"]
+    pred --> repo
+    pred --> art[["ml/artifacts"]]
     sec["core/security (JWT)"] -.-> ar
     sec -.-> er
 
-    class main,health,ar,asv,repo,met,sch,ing,evs,mod,ses,cfg built
-    class er,cr,rr,pred,feat,art,sec planned
+    class main,health,ar,asv,repo,met,sch,ing,evs,mod,ses,cfg,cr,pred,feat,art built
+    class er,rr,sec planned
     classDef built fill:#d1fae5,stroke:#059669,color:#064e3b
     classDef planned fill:#f3f4f6,stroke:#9ca3af,stroke-dasharray: 5 3,color:#374151
 ```
@@ -59,7 +60,7 @@ flowchart TD
 | GET | `/analytics/retention` | required | Cohort retention  `[Built]` open until Phase 5 |
 | GET | `/analytics/engagement` | required | Activity trends  `[Built]` open until Phase 5 |
 | GET | `/customers/{customer_id}/insights` | required | Per-customer insights  `[Planned]` |
-| POST | `/churn/predict` | required | Churn-risk estimate  `[Planned]` |
+| POST | `/churn/predict` | required | Churn-risk estimate  `[Built]` open until Phase 5 |
 | GET/POST | `/me/reports` | required (P1) | List / save own reports  `[Planned]` |
 | DELETE | `/me/reports/{id}` | required (P1) | Delete own report  `[Planned]` |
 
@@ -131,9 +132,11 @@ In words:
 
 Result reports `received`, `inserted`, `duplicates`, and `rejected` (index + reason; payload values are never echoed). `[Built]` as `services/ingestion.py`; the HTTP route is not built yet.
 
-## 3.5 Churn model design
+## 3.5 Churn model design `[Built]`
 
-Working proposal for the label timeline (illustrative until fixed in Phase 4):
+Full definitions, measured results, error review and limitations: [Model card](model_card.md). Summary of what was built:
+
+Label timeline as built:
 
 ```mermaid
 flowchart LR
@@ -164,9 +167,9 @@ flowchart LR
 ```
 
 
-- **Label** (single definition, fixed in Phase 4): inactivity — no qualifying activity in the prediction horizon (illustrative: features from prior 28 days, target over next 14 days).
+- **Label** (fixed in Phase 4): among customers active in the prior 28 days, `churn = 1` if there is no qualifying activity in the next 14 days. Weekly cutoffs; inactive customers are not scored.
 - **Features** (all computable at cutoff): days since last activity · active days in window · event counts by category · activity change vs previous window · key features used · onboarding completion · account age · plan.
-- **Training**: naive baseline → Logistic Regression (interpretable) → Random Forest if useful. Preprocessing fit inside a scikit-learn `Pipeline` on training data only. Time-based split on the synthetic event data.
+- **Training**: Logistic Regression ships (chosen up front); Random Forest and two naive baselines are reported for comparison. Preprocessing is fit inside a scikit-learn `Pipeline` on training rows only. Time-based split by cutoff with a 14-day purge gap on the synthetic event data.
 - **Evaluation**: confusion matrix, precision, recall, F1, ROC‑AUC, class-imbalance check, naive-baseline comparison, error review. Real numbers reported in the model card.
 - **Artifact**: fitted pipeline + feature schema + training metadata + `model_version` (joblib), loaded and validated at API start.
 - **Public churn dataset**: used for a separate supplementary classifier; random/stratified split; no temporal claims.

@@ -20,6 +20,8 @@ def engine():
         with eng.begin() as conn:
             conn.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
     except OperationalError as exc:
+        if os.environ.get("CI"):  # CI must exercise the DB tests, so never skip silently there
+            raise
         pytest.skip(f"Postgres not available ({type(exc).__name__}); run `docker compose up -d`")
 
     old = os.environ.get("DATABASE_URL")

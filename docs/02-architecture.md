@@ -18,8 +18,8 @@ flowchart TD
     train["Offline training"] --> art[["Versioned model artifact"]]
     art --> inf
 
-    class api,svc,an,ing,db,src built
-    class ui,auth,inf,train,art planned
+    class api,svc,an,ing,db,src,inf,train,art built
+    class ui,auth planned
     classDef built fill:#d1fae5,stroke:#059669,color:#064e3b
     classDef planned fill:#f3f4f6,stroke:#9ca3af,stroke-dasharray: 5 3,color:#374151
 ```
@@ -66,7 +66,7 @@ flowchart LR
 
 ## Failure behaviour `[Planned]`
 
-Target behaviour. Not yet implemented: today an unreachable database surfaces as a generic 500 rather than a 503, and there are no token checks. Ingestion already guarantees that a failed write is rolled back and never reported as success.
+Partly implemented. Built and tested: a missing or invalid model artifact returns 503 on `/churn/predict` while the rest of the API stays up, and a failed ingestion write is rolled back and never reported as success. Not yet: an unreachable database surfaces as a generic 500 rather than a 503, and there are no token checks.
 
 | Failure | Behaviour |
 |---|---|

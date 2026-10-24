@@ -4,7 +4,7 @@ import pandas as pd
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.db.models import Event
+from app.db.models import Customer, Event
 
 
 def data_through(session: Session) -> pd.Timestamp | None:
@@ -13,13 +13,27 @@ def data_through(session: Session) -> pd.Timestamp | None:
     return None if ts is None else pd.Timestamp(ts).tz_convert("UTC")
 
 
+def resolve_customers(session: Session, external_ids: list[str]) -> dict[str, int]:
+    """Map external customer ids to internal ids; unknown ids are absent from the result."""
+    rows = session.execute(
+        select(Customer.external_customer_id, Customer.id).where(
+            Customer.external_customer_id.in_(external_ids)
+        )
+    )
+    return {ext: pk for ext, pk in rows}
+
+
 def load_events(
-    session: Session, until: pd.Timestamp | None = None, since: pd.Timestamp | None = None
+    session: Session,
+    until: pd.Timestamp | None = None,
+    since: pd.Timestamp | None = None,
+    customer_ids: list[int] | None = None,
 ) -> pd.DataFrame:
     """Events before ``until`` (all if None), loaded in memory.
 
-    With ``since``, only events at or after it are fetched, plus every ``signup`` event (needed
-    to tell new from returning users). Callers that need full history leave ``since`` unset.
+    With ``customer_ids``, only those customers' events are fetched. With ``since``, only events
+    at or after it are fetched, plus every ``signup`` event (needed to tell new from returning
+    users). Callers that need full history leave ``since`` unset.
 
     MVP trade-off: metrics are computed in Pandas over the full history, which is fine for the
     synthetic log (tens of thousands of rows) but is not a design for large event volumes.
@@ -32,6 +46,8 @@ def load_events(
     )
     if until is not None:
         stmt = stmt.where(Event.event_timestamp < until.to_pydatetime())
+    if customer_ids is not None:
+        stmt = stmt.where(Event.customer_id.in_(customer_ids))
     if since is not None:
         stmt = stmt.where(
             or_(Event.event_timestamp >= since.to_pydatetime(), Event.event_name == "signup")

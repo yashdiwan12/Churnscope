@@ -79,7 +79,9 @@ sequenceDiagram
 
 Re-sending the same batch yields `inserted = 0`, `duplicates = n`. A DB failure rolls back and returns 5xx — never a success response.
 
-## 4.4 Churn prediction
+## 4.4 Churn prediction `[Built]` (authentication pending, Phase 5)
+
+Implemented in `services/prediction.py` and `api/routes/churn.py`. Predictions are not persisted yet; unknown ids return `unknown_customer` and customers with no activity in the prior 28 days return `not_eligible` instead of a score.
 
 ```mermaid
 sequenceDiagram
@@ -96,7 +98,6 @@ sequenceDiagram
     P->>P: build features at cutoff (same code and schema as training)
     P->>M: predict_proba
     M-->>P: risk_score
-    P->>DB: optionally persist to predictions
     P-->>R: risk_score, predicted_class, model_version
     R-->>S: JSON plus caveat that the score is an estimate
     Note over R,M: missing or schema-mismatched artifact returns 503, other endpoints stay up
@@ -104,7 +105,7 @@ sequenceDiagram
 
 If the artifact is missing or its feature schema mismatches: 503 with a generic message; other endpoints stay up.
 
-## 4.5 Offline model training (not a request)
+## 4.5 Offline model training (not a request) `[Built]`
 
 ```mermaid
 flowchart TD

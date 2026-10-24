@@ -1,0 +1,102 @@
+{
+  "artifact_sha256": "317440fc90b00b78c23baada036c6f36fa2f21a27ecd2819ad3f1ff1423a2a7d",
+  "created_at": "2026-10-24T20:24:16+00:00",
+  "data": {
+    "first_event": "2026-01-01T04:18:34+00:00",
+    "last_event": "2026-06-29T23:56:48.742967+00:00",
+    "n_customers": 2000,
+    "n_events": 42580,
+    "sha256": "c66dc05d310538e111c2e4a8906c6c326a839f812efd1d189ebcc08b4179c4f7",
+    "synthetic": true
+  },
+  "decision_threshold": 0.5,
+  "feature_columns": [
+    "days_since_last_activity",
+    "active_days_28d",
+    "active_days_14d",
+    "events_28d",
+    "sessions_28d",
+    "features_used_28d",
+    "reports_created_28d",
+    "reports_shared_28d",
+    "events_last_14d",
+    "events_prev_14d",
+    "activity_change",
+    "distinct_features_28d",
+    "onboarding_complete",
+    "has_created_report",
+    "account_age_days"
+  ],
+  "horizon_days": 14,
+  "label": {
+    "definition": "churn = 1 if the customer has no qualifying event in the horizon after the cutoff",
+    "horizon_days": 14,
+    "population": "customers who signed up before the cutoff and had >= 1 qualifying event in the feature window",
+    "qualifying_events": [
+      "session_start",
+      "feature_used",
+      "report_created",
+      "report_shared"
+    ],
+    "window_days": 28
+  },
+  "model_type": "LogisticRegression(class_weight=balanced) on standardised features",
+  "model_version": "churn-lr-131edb7229",
+  "numpy_version": "2.5.4",
+  "pandas_version": "3.1.0",
+  "python_version": "3.14.3",
+  "seed": 42,
+  "sklearn_version": "1.9.1",
+  "split": {
+    "gap_cutoffs_dropped": [
+      "2026-05-14"
+    ],
+    "note": "Time-based split by cutoff date; train labels close before the first test cutoff. The same customers can appear in train and test at different cutoffs.",
+    "test_churn_rate": 0.3563,
+    "test_cutoffs": [
+      "2026-05-21",
+      "2026-05-28",
+      "2026-06-04",
+      "2026-06-11"
+    ],
+    "test_rows": 3494,
+    "train_churn_rate": 0.349,
+    "train_cutoffs": [
+      "2026-01-29",
+      "2026-02-05",
+      "2026-02-12",
+      "2026-02-19",
+      "2026-02-26",
+      "2026-03-05",
+      "2026-03-12",
+      "2026-03-19",
+      "2026-03-26",
+      "2026-04-02",
+      "2026-04-09",
+      "2026-04-16",
+      "2026-04-23",
+      "2026-04-30",
+      "2026-05-07"
+    ],
+    "train_rows": 9572
+  },
+  "test_metrics": {
+    "accuracy": 0.823411562678878,
+    "base_rate": 0.35632512879221523,
+    "confusion_matrix": {
+      "fn": 326,
+      "fp": 291,
+      "tn": 1958,
+      "tp": 919
+    },
+    "f1": 0.7486761710794297,
+    "n": 3494,
+    "positives": 1245,
+    "pr_auc": 0.8348183046684126,
+    "precision": 0.759504132231405,
+    "recall": 0.738152610441767,
+    "roc_auc": 0.873787011094623,
+    "threshold": 0.5
+  },
+  "window_days": 28
+}

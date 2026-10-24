@@ -5,6 +5,8 @@ __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/
 backend/app/ml/artifacts/*.joblib
+# The one small, integrity-checked serving artifact is committed on purpose (see docs/model_card.md)
+!backend/app/ml/artifacts/churn_model.joblib
 data/raw/
 data/processed/
 .streamlit/secrets.toml

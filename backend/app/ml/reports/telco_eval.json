@@ -1,0 +1,67 @@
+{
+  "dataset": "IBM Telco Customer Churn (static snapshot, no timestamps)",
+  "split": {
+    "method": "stratified random 80/20; not temporal",
+    "seed": 42,
+    "test_churn_rate": 0.2654,
+    "test_rows": 1409,
+    "train_churn_rate": 0.2654,
+    "train_rows": 5634
+  },
+  "test_metrics": {
+    "logistic_regression": {
+      "accuracy": 0.7381121362668559,
+      "base_rate": 0.2654364797728886,
+      "confusion_matrix": {
+        "fn": 81,
+        "fp": 288,
+        "tn": 747,
+        "tp": 293
+      },
+      "f1": 0.6136125654450262,
+      "n": 1409,
+      "positives": 374,
+      "pr_auc": 0.6326487531063157,
+      "precision": 0.504302925989673,
+      "recall": 0.7834224598930482,
+      "roc_auc": 0.8416337285902502,
+      "threshold": 0.5
+    },
+    "majority_class": {
+      "accuracy": 0.7345635202271115,
+      "base_rate": 0.2654364797728886,
+      "confusion_matrix": {
+        "fn": 374,
+        "fp": 0,
+        "tn": 1035,
+        "tp": 0
+      },
+      "f1": 0.0,
+      "n": 1409,
+      "positives": 374,
+      "pr_auc": 0.2654364797728886,
+      "precision": 0.0,
+      "recall": 0.0,
+      "roc_auc": 0.5,
+      "threshold": 0.5
+    },
+    "random_forest": {
+      "accuracy": 0.7750177430801988,
+      "base_rate": 0.2654364797728886,
+      "confusion_matrix": {
+        "fn": 118,
+        "fp": 199,
+        "tn": 836,
+        "tp": 256
+      },
+      "f1": 0.617611580217129,
+      "n": 1409,
+      "positives": 374,
+      "pr_auc": 0.6420611423293245,
+      "precision": 0.5626373626373626,
+      "recall": 0.6844919786096256,
+      "roc_auc": 0.8370482316773877,
+      "threshold": 0.5
+    }
+  }
+}

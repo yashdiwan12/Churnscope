@@ -2,7 +2,7 @@
 
 Live tracker of implementation progress per phase. Detailed notes, decisions, and evidence live in each phase's `docs/history/<phase>/history.md`; the phase summary table is in [docs/10-project-history.md](docs/10-project-history.md).
 
-**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-10-24
+**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-10-25
 
 ## Summary
 
@@ -12,7 +12,7 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 | 1 | Data & metric definitions | ✅ Done | 6 / 6 |
 | 2 | Database & ingestion | ✅ Done | 7 / 7 |
 | 3 | Analytics | ✅ Done | 6 / 6 |
-| 4 | Churn model | ⬜ Not started | 0 / 8 |
+| 4 | Churn model | ✅ Done | 8 / 8 |
 | 5 | Authentication & authorization | ⬜ Not started | 0 / 7 |
 | 6 | Dashboard | ⬜ Not started | 0 / 8 |
 | 7 | Quality & documentation | ⬜ Not started | 0 / 10 |
@@ -56,15 +56,15 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 - [x] Validate against hand-checked examples
 - [x] Expose through FastAPI (open until Phase 5 adds auth)
 
-## Phase 4 — Churn model ⬜  ([history](docs/history/phase-4-churn-model/history.md))
-- [ ] Document label and horizon
-- [ ] Leakage-aware features
-- [ ] Baseline model
-- [ ] Preprocessing inside a pipeline
-- [ ] Evaluation with baseline comparison
-- [ ] Error and class-imbalance review
-- [ ] Save model, schema, version metadata
-- [ ] Inference service and tests
+## Phase 4 — Churn model ✅  ([history](docs/history/phase-4-churn-model/history.md))
+- [x] Document label and horizon
+- [x] Leakage-aware features
+- [x] Baseline model
+- [x] Preprocessing inside a pipeline
+- [x] Evaluation with baseline comparison
+- [x] Error and class-imbalance review
+- [x] Save model, schema, version metadata
+- [x] Inference service and tests (endpoint open until Phase 5 adds auth)
 
 ## Phase 5 — Authentication & authorization ⬜  ([history](docs/history/phase-5-auth/history.md))
 - [ ] Google OAuth in Supabase and Google Cloud
