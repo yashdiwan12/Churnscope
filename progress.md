@@ -10,7 +10,7 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 |---|---|---|---|
 | 0 | Setup | ✅ Done | 10 / 10 |
 | 1 | Data & metric definitions | 🟡 In progress | 5 / 6 |
-| 2 | Database & ingestion | 🟡 In progress | 6 / 7 |
+| 2 | Database & ingestion | ✅ Done | 7 / 7 |
 | 3 | Analytics | ⬜ Not started | 0 / 6 |
 | 4 | Churn model | ⬜ Not started | 0 / 8 |
 | 5 | Authentication & authorization | ⬜ Not started | 0 / 7 |
@@ -39,8 +39,8 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 - [x] Define cohort and retention periods
 - [x] Validate metrics on hand-checkable examples
 
-## Phase 2 — Database & ingestion 🟡  ([history](docs/history/phase-2-database-and-ingestion/history.md))
-- [ ] Supabase project and PostgreSQL schema (schema done and verified on local Postgres via Docker; Supabase project still to be created by the user)
+## Phase 2 — Database & ingestion ✅  ([history](docs/history/phase-2-database-and-ingestion/history.md))
+- [x] Supabase project and PostgreSQL schema (migrated via Alembic; verified on local Docker Postgres and Supabase)
 - [x] SQLAlchemy configured with driver
 - [x] Tables, constraints, initial indexes (Alembic)
 - [x] Ingestion service

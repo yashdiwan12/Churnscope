@@ -1,6 +1,6 @@
 # History — phase-2-database-and-ingestion
 
-**Status:** in progress (Supabase project pending) · **Started:** 2026-10-24
+**Status:** done · **Started:** 2026-10-24
 
 ## Done
 - `docker-compose.yml`: local Postgres 16 on port 5433 (dev and DB tests only; production is Supabase).
@@ -21,6 +21,9 @@
 - `uv run pytest -q`: 18 passed (8 new DB tests incl. concurrency); ruff clean.
 - Loaded the seed-42 synthetic log: 42,580 received, 42,580 inserted. Re-running: 0 inserted, 42,580 duplicates.
 
+- Supabase: the direct host (`db.<ref>.supabase.co`) is IPv6-only and did not resolve from the dev machine; switched to the Session pooler connection string. `alembic upgrade head` applied `0001`; all six tables present.
+- Loaded the synthetic log into Supabase (42,580 inserted in ~40 s); re-run: 0 inserted, 42,580 duplicates.
+- The pytest DB fixture drops the `public` schema, so it must only ever target the local Docker DB (`TEST_DATABASE_URL`), never Supabase.
+
 ## Open items
-- Create the Supabase project, set `DATABASE_URL` (use the pooled/SSL connection string), run `alembic upgrade head`, and re-run the tests against it.
 - Add indexes only after `EXPLAIN` on real analytics queries (Phase 3).
