@@ -2,38 +2,29 @@
 
 ## System context
 
-```
-                    +----------------------+
-                    |        User          |
-                    +----------+-----------+
-                               |
-                               v
-                    +----------------------+
-                    | Streamlit + Plotly   |   frontend/
-                    +-----+-----------+----+
-                          |           |
-                Sign-in   |           | Bearer access token
-                          v           v
-                +----------------+  +-----------------------+
-                | Supabase Auth  |  | FastAPI REST API      |   backend/
-                | Google OAuth   |  | Validate + authorize  |
-                +----------------+  +-----------+-----------+
-                                                |
-                                    +-----------v-----------+
-                                    | Application services  |
-                                    +----+-------------+----+
-                                         |             |
-                                +--------v---+   +-----v--------+
-                                | Analytics  |   | ML inference |
-                                | Pandas+SQL |   | scikit-learn |
-                                +--------+---+   +-----+--------+
-                                         +------+------+
-                                                v
-                                       SQLAlchemy -> Supabase PostgreSQL
+```mermaid
+flowchart TD
+    user([User]) --> ui["Streamlit + Plotly<br/>frontend/"]
+    ui -- "sign in" --> auth["Supabase Auth<br/>Google OAuth"]
+    ui -- "Bearer access token" --> api["FastAPI REST API<br/>backend/app/api"]
+    api -. "verify JWT" .-> auth
+    api --> svc["Application services<br/>backend/app/services"]
+    svc --> an["Analytics<br/>Pandas over fetched rows"]
+    svc --> inf["ML inference<br/>scikit-learn"]
+    an --> db[("Supabase PostgreSQL<br/>via SQLAlchemy")]
+    inf --> db
+    src["Event source / loader"] --> ing["Ingestion service<br/>validate + dedupe"]
+    ing --> db
+    train["Offline training"] --> art[["Versioned model artifact"]]
+    art --> inf
 
-Event source --> validated ingestion API --> PostgreSQL
-Offline training --> versioned model artifact --> ML inference
+    class api,svc,an,ing,db,src built
+    class ui,auth,inf,train,art planned
+    classDef built fill:#d1fae5,stroke:#059669,color:#064e3b
+    classDef planned fill:#f3f4f6,stroke:#9ca3af,stroke-dasharray: 5 3,color:#374151
 ```
+
+*Green = built, dashed grey = planned.*
 
 ## Architectural decisions
 
@@ -59,6 +50,19 @@ Offline training --> versioned model artifact --> ML inference
 | Core | `backend/app/core/` | Config, JWT verification, logging | Hold state |
 | ML | `backend/app/ml/` | `train.py`, `evaluate.py`, artifacts | Run in the request path (training) |
 | Frontend | `frontend/` | Pages, API client, Plotly charts | Access DB or hold service keys |
+
+A request moves strictly downward; lower layers never import upper ones.
+
+```mermaid
+flowchart LR
+    req([Request]) --> r["Routes<br/>HTTP, auth dependency"]
+    r --> sc["Schemas<br/>Pydantic validation"]
+    r --> sv["Services<br/>business logic"]
+    sv --> repo["Repositories<br/>SQLAlchemy reads"]
+    repo --> pg[("PostgreSQL")]
+    sv --> met["metrics.py<br/>pure Pandas"]
+    r -. "5xx / 4xx" .-> resp([Response])
+```
 
 ## Failure behaviour `[Planned]`
 

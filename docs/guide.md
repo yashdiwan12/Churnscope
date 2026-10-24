@@ -18,6 +18,7 @@ Start here. Churnscope turns product-activity events into engagement, funnel, re
 - **Status tags** (`[Planned]`, `[In progress]`, `[Built]`) mark what is real. Docs describe the target design; don't assume a feature exists unless tagged `[Built]`.
 - **Phase history**: each phase has `docs/history/<phase>/history.md` recording what was done, decisions, and evidence. Update it as work lands, and update the table in doc 10.
 - **Honesty rule**: no performance, scale, or accuracy claims until measured and recorded.
+- **Diagrams** are Mermaid blocks (rendered by GitHub and VS Code's Markdown preview). Green = built, dashed grey = planned; update the `class` lines when a component lands.
 
 ## Repository map
 

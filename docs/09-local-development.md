@@ -19,6 +19,18 @@ cp .env.example .env        # fill in values; never commit .env
 
 ## 9.3 Run
 
+First-time flow:
+
+```mermaid
+flowchart LR
+    dc["docker compose up<br/>Postgres :5433"] --> mig["alembic upgrade head<br/>create schema"]
+    mig --> gen["generate_events.py<br/>seeded synthetic data"]
+    gen --> load["load_events.py<br/>idempotent ingestion"]
+    load --> api["uvicorn app.main:app<br/>API on :8000"]
+    api --> ui["streamlit run app.py<br/>:8501"]
+    dc --> tst["pytest<br/>DB tests use the same Postgres"]
+```
+
 ```bash
 # Backend (from backend/)
 cd backend && uv run uvicorn app.main:app --reload --port 8000   # docs at /docs

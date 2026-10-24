@@ -2,6 +2,26 @@
 
 Each phase maps to a milestone in [PLAN.md](../PLAN.md) and has its own log in `docs/history/<phase>/history.md`. Update both this table and the phase log whenever work lands.
 
+```mermaid
+flowchart LR
+    p0["0 Setup"] --> p1["1 Data and metrics"]
+    p1 --> p2["2 Database and ingestion"]
+    p2 --> p3["3 Analytics API"]
+    p3 --> p4["4 Churn model"]
+    p4 --> p5["5 Auth"]
+    p5 --> p6["6 Dashboard"]
+    p6 --> p7["7 Quality, docs, deploy"]
+    p3 --> p6
+    p4 --> p6
+
+    class p0,p1,p2,p3 built
+    class p4,p5,p6,p7 planned
+    classDef built fill:#d1fae5,stroke:#059669,color:#064e3b
+    classDef planned fill:#f3f4f6,stroke:#9ca3af,stroke-dasharray: 5 3,color:#374151
+```
+
+*Green = built, dashed grey = planned.*
+
 | Phase | Milestone | Goal | Exit criterion | Status | Log |
 |---|---|---|---|---|---|
 | 0 | Setup | Repo, env, scaffolding, dataset choice | Clean local setup, documented data source, no secrets in Git | Done | [log](history/phase-0-setup/history.md) |

@@ -2,13 +2,22 @@
 
 ## 4.1 Sign-in
 
-```
-User -> Streamlit: click "Sign in with Google"
-Streamlit -> Supabase Auth: start Google OAuth (redirect URL configured)
-Supabase Auth -> Google: authenticate
-Google -> Supabase Auth: identity
-Supabase Auth -> Streamlit: session (access_token JWT, refresh_token)
-Streamlit: store token in session state (server-side), never in URL/logs
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant S as Streamlit
+    participant A as Supabase Auth
+    participant G as Google
+    participant API as FastAPI
+    U->>S: click Sign in with Google
+    S->>A: start Google OAuth (redirect URL configured)
+    A->>G: authenticate
+    G-->>A: identity
+    A-->>S: session (access_token JWT, refresh_token)
+    Note over S: token kept in server-side session state, never in URL or logs
+    S->>API: first authenticated call (Bearer token)
+    API->>API: upsert user_profiles row keyed by token sub
 ```
 
 On first authenticated API call the backend upserts a `user_profiles` row keyed by the token's `sub`.
@@ -17,14 +26,25 @@ On first authenticated API call the backend upserts a `user_profiles` row keyed 
 
 The analytics endpoints exist (Phase 3) but are **unauthenticated until Phase 5**; the flow below is the target.
 
-```
-Streamlit page -> FastAPI: GET /analytics/funnel?from=..&to=..   (Authorization: Bearer <jwt>)
-FastAPI dependency: verify signature, expiry, audience, issuer -> user_id = sub
-Route: validate query params (Pydantic; date range, limits)
-Service: build funnel (SQL aggregation + Pandas) using documented rules
-Repository (SQLAlchemy) -> PostgreSQL
-FastAPI -> Streamlit: JSON { steps[], denominators, window, generated_at }
-Streamlit: render Plotly chart with labelled window + denominators
+```mermaid
+sequenceDiagram
+    autonumber
+    participant S as Streamlit page
+    participant R as FastAPI route
+    participant V as Auth dependency (Phase 5)
+    participant SV as Service
+    participant DB as PostgreSQL
+    S->>R: GET /analytics/funnel?start=..&end=.. (Bearer jwt)
+    R->>V: verify signature, expiry, audience, issuer
+    V-->>R: user_id = sub (or 401)
+    R->>R: validate params (tz-aware, start before end, max 366 days) or 422
+    R->>SV: funnel_report(window, window_days)
+    SV->>DB: fetch needed event rows (SQLAlchemy)
+    DB-->>SV: rows
+    SV->>SV: apply funnel rules in Pandas, censor at data_through
+    SV-->>R: steps, eligible_users, window, data_through
+    R-->>S: 200 JSON
+    S->>S: render Plotly chart with labelled window and denominators
 ```
 
 Errors: 401 bad/missing token · 422 invalid params · 503 DB unavailable · timeout → UI error state.
@@ -33,36 +53,68 @@ Errors: 401 bad/missing token · 422 invalid params · 503 DB unavailable · tim
 
 The ingestion service and its tests are built; the `POST /events` route and its authentication arrive in Phase 5. `scripts/load_events.py` calls the service directly meanwhile. The response field names below are the target; the service currently returns `received / inserted / duplicates / rejected`.
 
-```
-Client/loader -> FastAPI: POST /events  [ {event_id, customer_id, event_name, event_timestamp, properties}, ... ]
-FastAPI: authenticate, validate each event (schema, name allow-list, UTC timestamp, payload size)
-Service: split into valid / rejected(reason)
-Repository: BEGIN; INSERT ... ON CONFLICT (event_id) DO NOTHING; COMMIT
-FastAPI -> client: 200 { received, inserted, duplicates, rejected:[{index, reason}] }
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client or loader
+    participant R as POST /events (Phase 5)
+    participant SV as ingest_events
+    participant DB as PostgreSQL
+    C->>R: batch of events
+    R->>R: authenticate
+    R->>SV: raw events
+    SV->>SV: validate each row, split valid and rejected
+    SV->>DB: upsert customers (ON CONFLICT DO NOTHING)
+    SV->>DB: INSERT events ON CONFLICT (event_id) DO NOTHING
+    alt database error
+        DB-->>SV: error
+        SV->>DB: ROLLBACK
+        SV-->>R: raise, mapped to 5xx
+    else success
+        SV->>DB: COMMIT
+        SV-->>R: received, inserted, duplicates, rejected
+        R-->>C: 200 result
+    end
 ```
 
 Re-sending the same batch yields `inserted = 0`, `duplicates = n`. A DB failure rolls back and returns 5xx — never a success response.
 
 ## 4.4 Churn prediction
 
-```
-Streamlit -> FastAPI: POST /churn/predict { customer_ids | customer_id }   (Bearer)
-FastAPI: authenticate, validate input
-Prediction service: build features at the cutoff (same code/schema as training)
-Model: loaded once at startup from the versioned artifact
-Service: risk_score, predicted_class, model_version  -> optionally persist to predictions
-FastAPI -> Streamlit: JSON + caveat that the score is an estimate
+```mermaid
+sequenceDiagram
+    autonumber
+    participant S as Streamlit
+    participant R as FastAPI
+    participant P as Prediction service
+    participant M as Model (loaded at startup)
+    participant DB as PostgreSQL
+    S->>R: POST /churn/predict (Bearer)
+    R->>R: authenticate and validate input
+    R->>P: customer ids
+    P->>DB: read recent activity
+    P->>P: build features at cutoff (same code and schema as training)
+    P->>M: predict_proba
+    M-->>P: risk_score
+    P->>DB: optionally persist to predictions
+    P-->>R: risk_score, predicted_class, model_version
+    R-->>S: JSON plus caveat that the score is an estimate
+    Note over R,M: missing or schema-mismatched artifact returns 503, other endpoints stay up
 ```
 
 If the artifact is missing or its feature schema mismatches: 503 with a generic message; other endpoints stay up.
 
 ## 4.5 Offline model training (not a request)
 
-```
-python -m app.ml.train  ->  load data -> build features at cutoffs -> time-based split
- -> fit Pipeline(preprocess + model) on train -> evaluate on holdout
- -> write artifact + feature schema + metadata (version, data range, metrics, seed)
- -> update docs/model_card.md with real results
+```mermaid
+flowchart TD
+    cmd(["python -m app.ml.train"]) --> ld["Load data"]
+    ld --> ft["Build features at cutoffs"]
+    ft --> sp["Time-based split"]
+    sp --> fit["Fit Pipeline (preprocess + model) on train"]
+    fit --> ev["Evaluate on holdout"]
+    ev --> wr["Write artifact + feature schema +<br/>metadata (version, data range, metrics, seed)"]
+    wr --> mc["Update docs/model_card.md with real results"]
 ```
 
 ## 4.6 Saved reports (P1)

@@ -13,13 +13,50 @@ Before modelling: inspect types, missing values, duplicates, timestamps, identif
 
 ## 5.2 Entity relationships
 
-```
-user_profiles (Churnscope users)        customers (analysed product's users)
-        |                                        |  1
-        | 1                                      |
-        | N                                      | N
-   saved_reports                      events ----+     predictions
-                                      (customer_id FK) (customer_id FK)
+```mermaid
+erDiagram
+    user_profiles ||--o{ saved_reports : owns
+    customers ||--o{ events : generates
+    customers ||--o{ predictions : "is scored by"
+
+    customers {
+        bigint id PK
+        text external_customer_id UK
+        timestamptz created_at
+        text plan
+        text status
+        timestamptz churned_at
+    }
+    events {
+        bigint id PK
+        text event_id UK "idempotency key"
+        bigint customer_id FK
+        text event_name
+        timestamptz event_timestamp
+        jsonb properties
+        timestamptz ingested_at
+    }
+    predictions {
+        bigint id PK
+        bigint customer_id FK
+        timestamptz prediction_time
+        text prediction_horizon
+        numeric risk_score "CHECK 0 to 1"
+        text predicted_class
+        text model_version
+    }
+    user_profiles {
+        uuid id PK "Supabase Auth user id"
+        text display_name
+        timestamptz created_at
+    }
+    saved_reports {
+        bigint id PK
+        uuid user_id FK
+        varchar report_type
+        jsonb filters
+        timestamptz created_at
+    }
 ```
 
 `user_profiles` (people using Churnscope) are **deliberately separate** from `customers` (users of the product being analysed).

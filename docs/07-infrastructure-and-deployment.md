@@ -13,6 +13,27 @@
 
 Docker is an optional later improvement (P1), not an MVP prerequisite.
 
+```mermaid
+flowchart LR
+    dev(["Developer"]) -- push --> gh["GitHub"]
+    gh --> ci["GitHub Actions<br/>ruff + pytest"]
+    br(["Browser"]) --> st["Streamlit Community Cloud<br/>frontend/app.py"]
+    st -- "Bearer token, HTTPS" --> rd["Render web service<br/>FastAPI"]
+    st -- "OAuth sign-in" --> sa["Supabase Auth"]
+    sa <--> go["Google OAuth"]
+    rd -- "pooled SSL connection" --> pg[("Supabase PostgreSQL")]
+    rd -. "verify JWT" .-> sa
+    gh -. "deploy" .-> rd
+    gh -. "deploy" .-> st
+
+    class gh,ci,pg built
+    class st,rd,sa,go planned
+    classDef built fill:#d1fae5,stroke:#059669,color:#064e3b
+    classDef planned fill:#f3f4f6,stroke:#9ca3af,stroke-dasharray: 5 3,color:#374151
+```
+
+*Green = built (database and CI exist today), dashed grey = planned.*
+
 ## 7.2 Environment variables
 
 | Variable | Service | Purpose |
