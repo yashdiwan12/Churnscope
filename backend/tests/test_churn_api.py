@@ -63,12 +63,14 @@ def ingest(session, rows):
     assert result.rejected == []
 
 
-# Latest event 2026-06-30 12:00 -> default cutoff 2026-07-01 00:00, window [06-03, 07-01).
+# Latest event 2026-06-30 12:00 -> default cutoff is the last full midnight, 2026-06-30 00:00;
+# window [06-02, 06-30). The partial day 06-30 is not used for features.
 ROWS = [
     ("A", "signup", "2026-05-01T00:00:00Z"),
-    ("A", "session_start", "2026-06-30T12:00:00Z"),  # 0.5 days before the cutoff
+    ("A", "session_start", "2026-06-29T12:00:00Z"),  # 0.5 days before the cutoff
+    ("A", "session_start", "2026-06-30T12:00:00Z"),  # partial last day: after the cutoff
     ("B", "signup", "2026-05-01T00:00:00Z"),
-    ("B", "session_start", "2026-06-05T00:00:00Z"),  # 26 days before the cutoff
+    ("B", "session_start", "2026-06-05T00:00:00Z"),  # 25 days before the cutoff
     ("C", "signup", "2026-04-01T00:00:00Z"),
     ("C", "session_start", "2026-05-01T00:00:00Z"),  # outside the 28-day window
 ]
@@ -85,13 +87,13 @@ def test_scores_hand_checked_and_preserves_request_order(client):
     assert r.status_code == 200
     body = r.json()
     assert body["model_version"] == "test-v1"
-    assert body["cutoff"].startswith("2026-07-01T00:00:00")
+    assert body["cutoff"].startswith("2026-06-30T00:00:00")
     assert (body["window_days"], body["horizon_days"], body["decision_threshold"]) == (28, 14, 0.5)
     assert "not calibrated" in body["caveat"]
 
     p = {x["customer_id"]: x for x in body["predictions"]}
     assert [x["customer_id"] for x in body["predictions"]] == ["B", "A", "C", "ghost"]  # deduped
-    assert p["B"]["risk_score"] == pytest.approx(26 / 28, abs=1e-4)
+    assert p["B"]["risk_score"] == pytest.approx(25 / 28, abs=1e-4)
     assert p["B"]["predicted_class"] == "at_risk"
     assert p["A"]["risk_score"] == pytest.approx(0.5 / 28, abs=1e-4)
     assert p["A"]["predicted_class"] == "not_at_risk"
@@ -160,7 +162,7 @@ def test_serving_matches_training_features_exactly(session):
     bundle = ModelBundle(pipeline=trained.pipeline, metadata=trained.metadata)
     client = make_client(session, bundle)
 
-    cutoff = events["event_timestamp"].max().floor("D") + pd.Timedelta(days=1)
+    cutoff = events["event_timestamp"].max().floor("D")
     x = features.build_features(events, [cutoff])
     expected = dict(
         zip(

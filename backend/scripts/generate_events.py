@@ -37,6 +37,7 @@ def generate(
     churn_week = rng.geometric(0.12, n_customers)  # weeks after signup when activity stops
     p_onboard = rng.random(n_customers) < 0.75
     p_report = rng.random(n_customers) < 0.55
+    p_share = rng.random(n_customers) < 0.4
 
     rows: list[tuple] = []
     seq = 0
@@ -51,9 +52,14 @@ def generate(
         cid, s = row["external_customer_id"], row["created_at"]
         add(cid, "signup", s)
         if p_onboard[i]:
-            add(cid, "onboarding_complete", s + pd.Timedelta(hours=float(rng.exponential(24))))
-            if p_report[i]:
-                add(cid, "report_created", s + pd.Timedelta(hours=float(rng.exponential(72)) + 1))
+            onboarded = s + pd.Timedelta(hours=float(rng.exponential(24)))
+            add(cid, "onboarding_complete", onboarded)
+            if p_report[i]:  # the key action follows onboarding, so funnel order is meaningful
+                reported = onboarded + pd.Timedelta(hours=float(rng.exponential(48)) + 1)
+                add(cid, "report_created", reported)
+                if p_share[i]:
+                    shared = reported + pd.Timedelta(hours=float(rng.exponential(48)) + 1)
+                    add(cid, "report_shared", shared)
         active_until = s + pd.Timedelta(weeks=int(churn_week[i]))
         for w in range(int(churn_week[i])):
             for _ in range(rng.poisson(3 * engagement[i])):

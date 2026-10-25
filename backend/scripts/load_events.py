@@ -19,13 +19,14 @@ def main(path: Path) -> None:
     df = pd.read_csv(path)
     df["properties"] = df["properties"].map(json.loads)
     records = df.to_dict("records")
-    totals = {"received": 0, "inserted": 0, "duplicates": 0, "rejected": 0}
+    totals = {"received": 0, "inserted": 0, "duplicates": 0, "conflicts": 0, "rejected": 0}
     with Session(get_engine()) as session:
         for i in range(0, len(records), MAX_BATCH):
             r = ingest_events(session, records[i : i + MAX_BATCH])
             totals["received"] += r.received
             totals["inserted"] += r.inserted
             totals["duplicates"] += r.duplicates
+            totals["conflicts"] += r.conflicts
             totals["rejected"] += len(r.rejected)
     print(totals)
 

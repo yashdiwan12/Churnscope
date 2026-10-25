@@ -106,3 +106,43 @@ def test_failed_write_rolls_back_everything(session, monkeypatch):
     except RuntimeError:
         pass
     assert count(session, Customer) == 0 and count(session, Event) == 0
+
+
+def test_future_and_ancient_timestamps_are_rejected(session):
+    """One bad clock must not move data_through and break every default view (review finding)."""
+    from datetime import UTC, datetime, timedelta
+
+    soon = (datetime.now(UTC) + timedelta(minutes=1)).isoformat()
+    r = ingest_events(
+        session,
+        [
+            ev(1, event_timestamp="2099-01-01T00:00:00Z"),
+            ev(2, event_timestamp="1999-12-31T23:59:59Z"),
+            ev(3, event_timestamp=soon),  # within the allowed clock skew
+        ],
+    )
+    assert r.inserted == 1 and [x.index for x in r.rejected] == [0, 1]
+    assert "future" in r.rejected[0].reason and "before" in r.rejected[1].reason
+
+
+def test_duplicate_with_different_content_is_reported_as_conflict(session):
+    ingest_events(session, [ev(1)])
+    same = ingest_events(session, [ev(1)])
+    assert (same.duplicates, same.conflicts) == (1, 0)
+    changed = ingest_events(session, [ev(1, event_name="session_start"), ev(2)])
+    assert (changed.inserted, changed.duplicates, changed.conflicts) == (1, 1, 1)
+    # the stored event is untouched: first write wins
+    assert session.scalar(select(Event.event_name).where(Event.event_id == "e1")) == "feature_used"
+
+
+def test_in_batch_duplicate_with_different_content_is_a_conflict(session):
+    r = ingest_events(session, [ev(1), ev(1, event_name="session_start")])
+    assert (r.inserted, r.duplicates, r.conflicts) == (1, 1, 1)
+
+
+def test_customer_created_at_moves_earlier_with_older_events(session):
+    ingest_events(session, [ev(1, event_timestamp="2026-01-05T00:00:00Z")])
+    ingest_events(session, [ev(2, event_timestamp="2026-01-01T00:00:00Z")])
+    ingest_events(session, [ev(3, event_timestamp="2026-01-09T00:00:00Z")])
+    created = session.scalar(select(Customer.created_at))
+    assert created.isoformat().startswith("2026-01-01")

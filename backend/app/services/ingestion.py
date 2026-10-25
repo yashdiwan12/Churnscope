@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -38,7 +38,7 @@ def ingest_events(session: Session, raw_events: Sequence[dict[str, Any]]) -> Ing
         except ValidationError as err:
             rejected.append(Rejection(index=i, reason=_reason(err)))
 
-    inserted = 0
+    inserted = conflicts = 0
     if valid:
         try:
             ids = _resolve_customers(session, valid)
@@ -53,7 +53,9 @@ def ingest_events(session: Session, raw_events: Sequence[dict[str, Any]]) -> Ing
                 for e in valid
             ]
             stmt = insert(Event).values(rows).on_conflict_do_nothing(index_elements=["event_id"])
-            inserted = len(session.execute(stmt.returning(Event.id)).all())
+            new_ids = {r[0] for r in session.execute(stmt.returning(Event.event_id))}
+            inserted = len(new_ids)
+            conflicts = _count_conflicts(session, rows, new_ids)
             session.commit()  # customers + events land together or not at all
         except Exception:
             session.rollback()
@@ -63,15 +65,51 @@ def ingest_events(session: Session, raw_events: Sequence[dict[str, Any]]) -> Ing
         received=len(raw_events),
         inserted=inserted,
         duplicates=len(valid) - inserted,
+        conflicts=conflicts,
         rejected=rejected,
+    )
+
+
+def _count_conflicts(session: Session, rows: list[dict], new_ids: set[str]) -> int:
+    """How many non-inserted rows differ from what is stored under their event_id.
+
+    A retry of the same event is a harmless duplicate; the same event_id with different content
+    is a producer bug worth surfacing (the stored row is kept: first write wins).
+    """
+    seen: set[str] = set()
+    pending = []
+    for r in rows:
+        if r["event_id"] in new_ids and r["event_id"] not in seen:
+            seen.add(r["event_id"])  # this occurrence is the one that was written
+            continue
+        pending.append(r)
+    if not pending:
+        return 0
+    stored = {
+        row.event_id: row
+        for row in session.execute(
+            select(
+                Event.event_id,
+                Event.customer_id,
+                Event.event_name,
+                Event.event_timestamp,
+                Event.properties,
+            ).where(Event.event_id.in_({r["event_id"] for r in pending}))
+        )
+    }
+    return sum(
+        (s.customer_id, s.event_name, s.event_timestamp, s.properties or {})
+        != (r["customer_id"], r["event_name"], r["event_timestamp"], r["properties"] or {})
+        for r in pending
+        if (s := stored.get(r["event_id"])) is not None
     )
 
 
 def _resolve_customers(session: Session, events: Sequence[EventIn]) -> dict[str, int]:
     """Map external ids to internal ids, creating unknown customers.
 
-    A new customer's created_at is its earliest event in the batch (a placeholder until the
-    customer table is loaded from the source of truth).
+    created_at is a placeholder until the customer table is loaded from the source of truth: the
+    earliest event seen for the customer, moved earlier if an older event arrives later.
     """
     earliest: dict[str, Any] = {}
     for e in events:
@@ -81,7 +119,12 @@ def _resolve_customers(session: Session, events: Sequence[EventIn]) -> dict[str,
     stmt = insert(Customer).values(
         [{"external_customer_id": c, "created_at": ts} for c, ts in earliest.items()]
     )
-    session.execute(stmt.on_conflict_do_nothing(index_elements=["external_customer_id"]))
+    session.execute(
+        stmt.on_conflict_do_update(
+            index_elements=["external_customer_id"],
+            set_={"created_at": func.least(Customer.created_at, stmt.excluded.created_at)},
+        )
+    )
     rows = session.execute(
         select(Customer.external_customer_id, Customer.id).where(
             Customer.external_customer_id.in_(earliest)

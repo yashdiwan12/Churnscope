@@ -3,13 +3,30 @@ import os
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, make_url, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+# A database of its own: the fixture drops its schema, so it must never be the dev database.
 TEST_DB_URL = os.environ.get(
-    "TEST_DATABASE_URL", "postgresql+psycopg://churnscope:churnscope@localhost:5433/churnscope"
+    "TEST_DATABASE_URL",
+    "postgresql+psycopg://churnscope:churnscope@localhost:5433/churnscope_test",
 )
+
+
+def _ensure_database(url: str) -> None:
+    """Create the test database on the same server if it does not exist yet."""
+    target = make_url(url)
+    admin = create_engine(target.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    try:
+        with admin.connect() as conn:
+            exists = conn.scalar(
+                text("SELECT 1 FROM pg_database WHERE datname = :n"), {"n": target.database}
+            )
+            if not exists:
+                conn.execute(text(f'CREATE DATABASE "{target.database}"'))
+    finally:
+        admin.dispose()
 
 
 @pytest.fixture(scope="session")
@@ -17,6 +34,7 @@ def engine():
     """Fresh schema built by the real Alembic migrations. Skips if Postgres is unreachable."""
     eng = create_engine(TEST_DB_URL)
     try:
+        _ensure_database(TEST_DB_URL)
         with eng.begin() as conn:
             conn.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
     except OperationalError as exc:

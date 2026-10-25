@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.services.metrics import EVENT_NAMES
 
 MAX_PROPERTIES_BYTES = 4096
+MAX_CLOCK_SKEW = timedelta(minutes=5)
+MIN_EVENT_TIME = datetime(2000, 1, 1, tzinfo=UTC)
 _ID = {"min_length": 1, "max_length": 128, "pattern": r"^[A-Za-z0-9_.:-]+$"}
 
 
@@ -31,7 +33,13 @@ class EventIn(BaseModel):
     def _aware_utc(cls, v: datetime) -> datetime:
         if v.tzinfo is None:
             raise ValueError("event_timestamp must include a timezone")
-        return v.astimezone(UTC)
+        v = v.astimezone(UTC)
+        # A single bad clock would move "data through" and empty every default view.
+        if v > datetime.now(UTC) + MAX_CLOCK_SKEW:
+            raise ValueError(f"event_timestamp is in the future (allowed skew {MAX_CLOCK_SKEW})")
+        if v < MIN_EVENT_TIME:
+            raise ValueError(f"event_timestamp is before {MIN_EVENT_TIME:%Y-%m-%d}")
+        return v
 
     @field_validator("properties")
     @classmethod
@@ -49,5 +57,6 @@ class Rejection(BaseModel):
 class IngestResult(BaseModel):
     received: int
     inserted: int
-    duplicates: int
+    duplicates: int  # event_id already stored (or repeated in the batch); nothing written
+    conflicts: int  # duplicates whose content differs from the stored event (first write wins)
     rejected: list[Rejection]

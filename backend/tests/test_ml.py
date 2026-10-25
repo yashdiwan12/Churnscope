@@ -196,6 +196,11 @@ def test_artifact_without_predict_proba_is_rejected(saved):
         (lambda m: {**m, "decision_threshold": 1.5}, "decision_threshold"),
         (lambda m: {**m, "sklearn_version": 1}, "scikit-learn"),
         (lambda m: {**m, "numpy_version": "0.1"}, "numpy"),
+        (
+            lambda m: {**m, "label": {**m["label"], "qualifying_events": ["session_start"]}},
+            "qualifying",
+        ),
+        (lambda m: {**m, "label": "nope"}, "qualifying"),
     ],
 )
 def test_malformed_metadata_is_unavailable_not_a_crash(saved, mutate, message):

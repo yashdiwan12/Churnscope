@@ -94,9 +94,10 @@ def funnel_report(
         )
 
     ev = repositories.load_events(session)
-    in_range = (ev["event_timestamp"] >= s) & (ev["event_timestamp"] < e)
-    signups = ev[(ev["event_name"] == "signup") & in_range]
-    ev = ev[ev["customer_id"].isin(signups["customer_id"])]
+    # Scope by each customer's *first* signup, the same anchor the funnel uses.
+    first_signup = ev[ev["event_name"] == "signup"].groupby("customer_id")["event_timestamp"].min()
+    in_range = first_signup[(first_signup >= s) & (first_signup < e)]
+    ev = ev[ev["customer_id"].isin(in_range.index)]
     f = metrics.funnel(ev, as_of=through, window_days=window_days)
     steps = [
         FunnelStepOut(

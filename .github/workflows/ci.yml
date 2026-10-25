@@ -20,7 +20,7 @@ jobs:
           --health-retries 20
     env:
       # DB tests run against the service above; under CI they fail (never skip) if it is down.
-      TEST_DATABASE_URL: postgresql+psycopg://churnscope:churnscope@localhost:5433/churnscope
+      TEST_DATABASE_URL: postgresql+psycopg://churnscope:churnscope@localhost:5433/churnscope_test
     defaults:
       run:
         working-directory: backend

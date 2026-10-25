@@ -26,6 +26,7 @@ import numpy as np
 import sklearn
 
 from app.services import features
+from app.services.metrics import QUALIFYING_EVENTS
 
 ARTIFACT_DIR = Path(__file__).parent / "artifacts"
 MODEL_FILE = "churn_model.joblib"
@@ -83,6 +84,9 @@ def _validate_metadata(metadata: object) -> dict:
         raise ModelUnavailable("model metadata has no valid decision_threshold")
     if metadata.get("feature_columns") != features.FEATURE_COLUMNS:
         raise ModelUnavailable("model feature schema does not match the serving code")
+    label = metadata.get("label")
+    if not isinstance(label, dict) or label.get("qualifying_events") != list(QUALIFYING_EVENTS):
+        raise ModelUnavailable("model qualifying events do not match the serving code")
     if (metadata.get("window_days"), metadata.get("horizon_days")) != (
         features.WINDOW_DAYS,
         features.HORIZON_DAYS,

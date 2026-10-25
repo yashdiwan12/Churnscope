@@ -154,3 +154,23 @@ def test_openapi_lists_analytics_routes(client):
     paths = client.get("/openapi.json").json()["paths"]
     for p in ("overview", "funnel", "retention", "engagement"):
         assert f"/analytics/{p}" in paths
+
+
+def test_funnel_scopes_by_first_signup_only(client, session):
+    """A repeated signup inside the range must not pull in a customer who first signed up
+    earlier (review finding)."""
+    ingest_events(
+        session,
+        [
+            {
+                "event_id": "dup-signup",
+                "customer_id": "A",
+                "event_name": "signup",
+                "event_timestamp": "2026-01-06T12:00:00Z",
+            }
+        ],
+    )
+    r = client.get(
+        "/analytics/funnel", params={"start": "2026-01-06T00:00:00Z", "end": "2026-01-08T00:00:00Z"}
+    )
+    assert r.json()["eligible_users"] == 2  # B and C; A's first signup is 01-05

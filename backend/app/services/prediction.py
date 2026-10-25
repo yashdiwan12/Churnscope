@@ -19,9 +19,14 @@ _NOT_ELIGIBLE = (
 
 
 def default_cutoff(session: Session) -> pd.Timestamp | None:
-    """Start of the day after the latest event, i.e. 'now' for the data we have."""
+    """The last midnight (UTC) at or before the latest event.
+
+    Training cutoffs always have complete data before them. Using the start of the *next* day
+    would count the unobserved rest of the latest day as inactivity and inflate
+    ``days_since_last_activity``, so the partial latest day is left out instead.
+    """
     through = repositories.data_through(session)
-    return None if through is None else through.floor("D") + pd.Timedelta(days=1)
+    return None if through is None else through.floor("D")
 
 
 def predict(
