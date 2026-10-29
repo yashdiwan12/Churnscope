@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import DatabaseUnavailable, get_session
 from app.main import create_app
+from tests.auth_helpers import act_as_allowed_user
 
 UNREACHABLE = "postgresql+psycopg://user:secret@127.0.0.1:1/nowhere"
 
@@ -34,6 +35,7 @@ def unconfigured_session():
 def test_database_failures_are_503_without_details(dependency, method, path, body):
     app = create_app()
     app.dependency_overrides[get_session] = dependency
+    act_as_allowed_user(app)
     app.state.model_bundle = object()  # past the model check, so the DB is what fails
     client = TestClient(app, raise_server_exceptions=False)
     r = client.request(method, path, json=body)

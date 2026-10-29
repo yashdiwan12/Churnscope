@@ -3,13 +3,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from app.core.authorization import current_user
 from app.db.session import get_session
 from app.ml.artifact import ModelBundle
 from app.schemas.churn import PredictRequest, PredictResponse
 from app.services import prediction
 
-# Phase 5 attaches the verified-token dependency here (`dependencies=[Depends(...)]`).
-router = APIRouter(prefix="/churn", tags=["churn"])
+router = APIRouter(prefix="/churn", tags=["churn"], dependencies=[Depends(current_user)])
 
 SessionDep = Annotated[Session, Depends(get_session)]
 

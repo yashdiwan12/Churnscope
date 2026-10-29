@@ -53,3 +53,13 @@ class StaticJWKS:
         if kid not in self._keys:
             raise jwt.PyJWKClientError("Unable to find a signing key that matches")
         return SimpleNamespace(key=self._keys[kid])
+
+
+def act_as_allowed_user(app) -> None:
+    """For tests of other behaviour: skip token checks and act as an allow-listed user."""
+    from app.core.authorization import current_user
+    from app.core.security import AuthUser
+
+    app.dependency_overrides[current_user] = lambda: AuthUser(
+        id=uuid.uuid4(), email="alice@example.com", amr_methods=("oauth",), provider="google"
+    )

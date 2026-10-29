@@ -14,6 +14,7 @@ from app.ml import train
 from app.ml.artifact import ModelBundle
 from app.services import features
 from app.services.ingestion import ingest_events
+from tests.auth_helpers import act_as_allowed_user
 
 _spec = importlib.util.spec_from_file_location(
     "generate_events", Path(__file__).parents[1] / "scripts" / "generate_events.py"
@@ -43,6 +44,7 @@ def make_client(session, bundle: ModelBundle | None) -> TestClient:
     app = create_app()
     app.dependency_overrides[get_session] = lambda: session
     app.state.model_bundle = bundle
+    act_as_allowed_user(app)
     return TestClient(app)
 
 
@@ -227,6 +229,7 @@ def test_missing_model_is_503_even_when_the_database_is_broken():
         yield  # pragma: no cover
 
     app = create_app()
+    act_as_allowed_user(app)
     app.dependency_overrides[get_session] = broken_session
     app.state.model_bundle = None
     r = TestClient(app, raise_server_exceptions=False).post(
@@ -242,6 +245,7 @@ def test_api_starts_and_serves_when_the_artifact_is_corrupt(session, tmp_path, m
     (tmp_path / artifact.META_FILE).write_text("[]")
     monkeypatch.setattr(artifact, "ARTIFACT_DIR", tmp_path)
     app = create_app()
+    act_as_allowed_user(app)
     app.dependency_overrides[get_session] = lambda: session
     with TestClient(app) as c:  # runs the lifespan, which loads the model
         assert app.state.model_bundle is None
