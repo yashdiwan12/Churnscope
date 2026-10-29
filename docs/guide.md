@@ -38,4 +38,4 @@ Datasets → metric definitions → Pandas analytics → DB + ingestion → API 
 
 ## Where to go next
 
-Phase 0 open items are listed in [history/phase-0-setup/history.md](history/phase-0-setup/history.md).
+Current status and the next steps are in [progress.md](../progress.md). Phase 5 (authentication) has a design spec awaiting review: [superpowers/specs/2026-10-29-phase5-auth-design.md](superpowers/specs/2026-10-29-phase5-auth-design.md). Measured model results and limits: [model_card.md](model_card.md).

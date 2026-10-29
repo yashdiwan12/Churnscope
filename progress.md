@@ -2,7 +2,7 @@
 
 Live tracker of implementation progress per phase. Detailed notes, decisions, and evidence live in each phase's `docs/history/<phase>/history.md`; the phase summary table is in [docs/10-project-history.md](docs/10-project-history.md).
 
-**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-10-29
+**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-10-29 · verified: 112 backend tests pass, ruff clean, live Supabase checked
 
 ## Summary
 
@@ -65,9 +65,11 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 - [x] Error and class-imbalance review
 - [x] Save model, schema, version metadata
 - [x] Inference service and tests (endpoint open until Phase 5 adds auth)
-- [x] Post-phase review passes: three code reviews, all findings fixed and logged in the history (109 tests); data regenerated and model retrained
+- [x] Post-phase review passes: two independent code reviews, all findings fixed and logged in the history; data regenerated and model retrained
 
 ## Phase 5 — Authentication & authorization 🟡  ([history](docs/history/phase-5-auth/history.md))
+- [x] Early hardening: RLS enabled on all tables and `anon`/`authenticated` grants revoked (migration `0002`, applied on Supabase, tested)
+- [x] Design spec written, awaiting review: [docs/superpowers/specs/2026-10-29-phase5-auth-design.md](docs/superpowers/specs/2026-10-29-phase5-auth-design.md) (these two lines are not among the 7 counted tasks below)
 - [ ] Google OAuth in Supabase and Google Cloud
 - [ ] Redirect URLs (local and deployed)
 - [ ] Streamlit sign-in/sign-out
