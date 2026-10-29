@@ -21,6 +21,7 @@ API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8501")
+FLOW_REUSE_SECONDS = 300  # well inside the verifier TTL of 10 minutes
 
 
 @st.cache_resource
@@ -58,8 +59,13 @@ def finish_sign_in(code: str, flow: str) -> None:
 
 def sign_in_page() -> None:
     st.write("Sign in to view analytics and churn risk.")
-    flow, verifier = new_verifier()[:24], new_verifier()
-    verifier_store().put(flow, verifier)
+    # One pending sign-in per browser session (not one per rerun), so reruns cannot flood the store.
+    pending = st.session_state.get("pending_flow")
+    if pending is None or time.monotonic() - pending[2] > FLOW_REUSE_SECONDS:
+        pending = (new_verifier()[:24], new_verifier(), time.monotonic())
+        st.session_state["pending_flow"] = pending
+        verifier_store().put(pending[0], pending[1])
+    flow, verifier, _ = pending
     url = authorize_url(
         supabase_url=SUPABASE_URL,
         redirect_to=f"{APP_BASE_URL}?flow={flow}",

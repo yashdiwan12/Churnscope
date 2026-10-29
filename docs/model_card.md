@@ -12,7 +12,7 @@ Status: **[Built]** in `backend/app/ml/`, `backend/app/services/features.py`, `b
 | Shipped model | `churn-lr-e330fa34d3`: Logistic Regression (class-balanced) on 15 standardised behavioural features |
 | Test result | ROC-AUC **0.879**, precision 0.750, recall 0.741, F1 0.746 at threshold 0.5 (churn rate in test: 34.5%) |
 | Honest headline | It beats "always predict no churn" clearly, but it **does not clearly beat a one-line rule** ("last active 7 or more days ago"): F1 0.746 vs 0.742, ROC-AUC 0.879 vs 0.881 (the rule is slightly ahead on ROC-AUC) |
-| Served by | `POST /churn/predict` (unauthenticated until Phase 5) |
+| Served by | `POST /churn/predict` (requires a signed-in, allow-listed user) |
 
 ## Label and population
 

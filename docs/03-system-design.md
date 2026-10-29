@@ -54,15 +54,16 @@ flowchart TD
 | Method | Endpoint | Auth | Purpose | Status |
 |---|---|---|---|---|
 | GET | `/health` | none | Liveness (+ DB check)  `[Built]` liveness only; DB check planned |
-| POST | `/events` | required | Validate and store events (batch)  `[In progress]` ingestion service built (Phase 2); HTTP route added with auth in Phase 5 |
-| GET | `/analytics/overview` | required | Engagement summary  `[Built]` open until Phase 5 |
-| GET | `/analytics/funnel` | required | Funnel conversion  `[Built]` open until Phase 5 |
-| GET | `/analytics/retention` | required | Cohort retention  `[Built]` open until Phase 5 |
-| GET | `/analytics/engagement` | required | Activity trends  `[Built]` open until Phase 5 |
+| POST | `/events` | `X-API-Key` (service key) | Validate and store events (batch)  `[Built]` closed (503) unless `INGEST_API_KEY` is set; 5 MB / 5,000-event caps |
+| GET | `/analytics/overview` | required | Engagement summary  `[Built]` |
+| GET | `/analytics/funnel` | required | Funnel conversion  `[Built]` |
+| GET | `/analytics/retention` | required | Cohort retention  `[Built]` |
+| GET | `/analytics/engagement` | required | Activity trends  `[Built]` |
 | GET | `/customers/{customer_id}/insights` | required | Per-customer insights  `[Planned]` |
-| POST | `/churn/predict` | required | Churn-risk estimate  `[Built]` open until Phase 5 |
-| GET/POST | `/me/reports` | required (P1) | List / save own reports  `[Planned]` |
-| DELETE | `/me/reports/{id}` | required (P1) | Delete own report  `[Planned]` |
+| POST | `/churn/predict` | required | Churn-risk estimate  `[Built]` |
+| GET | `/me` | required | Signed-in user (id, email, created_at)  `[Built]` |
+| GET/POST | `/me/reports` | required | List / save own reports (max 100)  `[Built]` |
+| DELETE | `/me/reports/{id}` | required | Delete own report; 404 for missing or someone else's  `[Built]` |
 
 Standards: Pydantic schemas everywhere; consistent error body; validated date ranges and pagination; no stack traces; timeouts on external calls; identity derived from the token only; OpenAPI generated and reviewed. Routes may change as the project evolves.
 

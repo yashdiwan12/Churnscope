@@ -42,11 +42,16 @@ def mint(key, alg: str, *, kid: str = "k1", **overrides) -> str:
 class StaticJWKS:
     """Stands in for jwt.PyJWKClient: maps kid -> private key, never touches the network."""
 
-    def __init__(self, keys: dict | None = None, down: bool = False):
+    def __init__(
+        self, keys: dict | None = None, down: bool = False, error: Exception | None = None
+    ):
         self._keys = {kid: k.public_key() for kid, k in (keys or {}).items()}
         self._down = down
+        self._error = error
 
     def get_signing_key_from_jwt(self, token: str):
+        if self._error:
+            raise self._error
         if self._down:
             raise jwt.PyJWKClientConnectionError("jwks unreachable")
         kid = jwt.get_unverified_header(token).get("kid")

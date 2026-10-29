@@ -1,6 +1,6 @@
 # Phase 5 design: authentication and authorization
 
-Status: **draft for review** · Date: 2026-10-29 · Phase: 5 of 7 · Path: architectural (new subsystem, changes the public interface of every route)
+Status: **implemented; spike results recorded in section 3.1** · Date: 2026-10-29 · Phase: 5 of 7 · Path: architectural (new subsystem, changes the public interface of every route)
 
 ## 1. Goal and non-goals
 
@@ -32,6 +32,16 @@ Checked against Supabase's docs or the auth-js source on 2026-10-29:
 3. Whether a redirect URL with an extra query (`?flow=<id>`) matches the allow-list pattern, and the logout path/scope parameter.
 4. Whether your project uses asymmetric signing keys or the legacy secret (Supabase dashboard, Project Settings, JWT Keys).
 5. Claims a real Google sign-in produces: `amr`, `app_metadata.provider`, `email`.
+
+### 3.1 Spike results (2026-10-30, real Google sign-in against the project)
+
+1. `email_verified` is `true` in the Google identity data and in `user_metadata`; the allow-list does not use it. (Read from the auth tables, not decoded from an access token.)
+2. `/authorize` accepts `provider`, `redirect_to`, `code_challenge` and `code_challenge_method=s256`; Supabase answers 302 to Google with its own callback as `redirect_uri`.
+3. `http://localhost:8501/**` on the redirect allow-list matches `http://localhost:8501?flow=<id>`; the sign-in returned to the app and completed. Sign-out (best-effort `POST /auth/v1/logout`) returned the user to the sign-in page.
+4. The project signs with an asymmetric key (ECC P-256, ES256) and publishes it at `/auth/v1/.well-known/jwks.json`; the legacy HS256 key is only listed as "previously used". No `SUPABASE_JWT_SECRET` is configured.
+5. The account has `app_metadata.provider = google`, `providers = ['google']` and an `oauth` authentication method; a real token for an allow-listed account passed the verifier and the Google check (`GET /me` returned 200).
+
+Not tested against the real service: a non-allow-listed Google account (covered by backend tests with minted tokens).
 
 ## 4. Architecture
 

@@ -26,3 +26,10 @@ def test_signed_out_user_gets_a_google_link_with_pkce(monkeypatch):
     link = at.get("link_button")[0].proto.url
     assert link.startswith("https://p.supabase.co/auth/v1/authorize?")
     assert "code_challenge=" in link and "flow%3D" in link
+
+
+def test_reruns_reuse_one_pending_sign_in(monkeypatch):
+    at = run(monkeypatch, SUPABASE_URL="https://p.supabase.co", SUPABASE_ANON_KEY="anon")
+    first = at.get("link_button")[0].proto.url
+    second = at.run().get("link_button")[0].proto.url
+    assert first == second

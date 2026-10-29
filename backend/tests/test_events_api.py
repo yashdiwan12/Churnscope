@@ -116,3 +116,15 @@ def test_x_api_key_is_not_a_cors_allowed_header(make):
         },
     )
     assert "x-api-key" not in r.headers.get("access-control-allow-headers", "").lower()
+
+
+def test_missing_content_length_is_411(make):
+    def chunks():  # no Content-Length: sent with chunked transfer encoding
+        yield b'{"events": []}'
+
+    r = make().post(
+        "/events",
+        content=chunks(),
+        headers={"X-API-Key": KEY, "Content-Type": "application/json"},
+    )
+    assert r.status_code == 411

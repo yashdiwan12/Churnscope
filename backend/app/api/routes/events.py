@@ -26,10 +26,13 @@ async def post_events(
     request: Request, session: Annotated[Session, Depends(get_session)]
 ) -> IngestResult:
     # Read by hand so the size limit is enforced before any JSON is parsed.
-    length = request.headers.get("content-length")
-    if length is None or not length.isdigit():
-        raise HTTPException(411, "Content-Length required")
-    if int(length) > MAX_BODY_BYTES:
+    try:
+        length = int(request.headers["content-length"])
+        if length < 0:
+            raise ValueError
+    except (KeyError, ValueError):
+        raise HTTPException(411, "Content-Length required") from None
+    if length > MAX_BODY_BYTES:
         raise HTTPException(413, "Request body too large")
     raw = await request.body()
     if len(raw) > MAX_BODY_BYTES:

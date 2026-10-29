@@ -55,6 +55,8 @@ class TokenVerifier:
             alg = jwt.get_unverified_header(token).get("alg")
         except jwt.PyJWTError:
             raise InvalidToken("invalid token") from None
+        if not isinstance(alg, str):  # a list/dict header would crash the set lookup below
+            raise InvalidToken("invalid token")
 
         key: Any
         if alg in ASYMMETRIC_ALGS:
@@ -62,7 +64,8 @@ class TokenVerifier:
                 raise AuthUnavailable("no signing keys configured")
             try:
                 key = self._jwks.get_signing_key_from_jwt(token).key
-            except jwt.PyJWKClientConnectionError:
+            except (jwt.PyJWKClientConnectionError, ValueError, OSError):
+                # unreachable or malformed key-set response: we cannot check, so never allow
                 raise AuthUnavailable("signing keys unreachable") from None
             except jwt.PyJWTError:
                 raise InvalidToken("invalid token") from None

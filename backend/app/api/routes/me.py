@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.authorization import current_profile, current_user
@@ -9,6 +9,9 @@ from app.db import reports
 from app.db.models import UserProfile
 from app.db.session import get_session
 from app.schemas.reports import MeOut, ReportCreate, ReportOut
+
+MAX_BIGINT = 2**63 - 1  # ids and offsets beyond this would be a database error, not a 404
+MAX_OFFSET = 1_000_000
 
 router = APIRouter(prefix="/me", tags=["me"])
 
@@ -26,7 +29,7 @@ def list_my_reports(
     profile: Profile,
     session: SessionDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    offset: Annotated[int, Query(ge=0, le=MAX_OFFSET)] = 0,
 ):
     return reports.list_reports(session, profile.id, limit, offset)
 
@@ -40,7 +43,9 @@ def create_my_report(body: ReportCreate, profile: Profile, session: SessionDep):
 
 
 @router.delete("/reports/{report_id}", status_code=204)
-def delete_my_report(report_id: int, profile: Profile, session: SessionDep) -> Response:
+def delete_my_report(
+    report_id: Annotated[int, Path(ge=1, le=MAX_BIGINT)], profile: Profile, session: SessionDep
+) -> Response:
     if not reports.delete_report(session, profile.id, report_id):
         raise HTTPException(404, "Report not found")  # same for missing and someone else's
     return Response(status_code=204)

@@ -40,11 +40,13 @@ def raw_hs256(secret: bytes, payload: dict) -> str:
 
 def test_settings_allow_lists_are_lowercased_and_trimmed():
     s = Settings(
-        allowed_emails=" Alice@Example.com , ,bob@x.io", allowed_email_domains="Example.COM"
+        _env_file=None,
+        allowed_emails=" Alice@Example.com , ,bob@x.io",
+        allowed_email_domains="Example.COM",
     )
     assert s.allowed_email_list == {"alice@example.com", "bob@x.io"}
     assert s.allowed_domain_list == {"example.com"}
-    assert Settings().allowed_email_list == set()
+    assert Settings(_env_file=None, allowed_emails="").allowed_email_list == set()
 
 
 def test_valid_es256_and_rs256_tokens_verify():
@@ -144,3 +146,18 @@ def test_error_messages_never_contain_the_token():
     with pytest.raises(InvalidToken) as exc:
         verifier().verify(token)
     assert token not in str(exc.value) and token.split(".")[1] not in str(exc.value)
+
+
+@pytest.mark.parametrize("alg", [["RS256"], {"a": 1}, 5, None], ids=str)
+def test_non_string_alg_header_is_invalid_token(alg):
+    head = b64(json.dumps({"alg": alg, "typ": "JWT"}).encode())
+    token = f"{head}.{b64(json.dumps(claims()).encode())}.{b64(b'sig')}"
+    with pytest.raises(InvalidToken):
+        verifier("s" * 32).verify(token)
+
+
+@pytest.mark.parametrize("error", [json.JSONDecodeError("bad", "", 0), OSError("reset")])
+def test_malformed_or_broken_jwks_response_is_auth_unavailable(error):
+    v = TokenVerifier(issuer=ISSUER, jwks_client=StaticJWKS({"k1": EC}, error=error))
+    with pytest.raises(AuthUnavailable):
+        v.verify(mint(EC, "ES256"))

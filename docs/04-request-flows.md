@@ -11,9 +11,12 @@ sequenceDiagram
     participant G as Google
     participant API as FastAPI
     U->>S: click Sign in with Google
-    S->>A: start Google OAuth (redirect URL configured)
+    S->>S: make flow id and PKCE verifier, keep verifier by flow id
+    S->>A: redirect to /authorize (redirect_to app URL with ?flow=id, code_challenge)
     A->>G: authenticate
     G-->>A: identity
+    A-->>S: redirect back with code
+    S->>A: POST /token?grant_type=pkce (code, verifier)
     A-->>S: session (access_token JWT, refresh_token)
     Note over S: token kept in server-side session state, never in URL or logs
     S->>API: first authenticated call (Bearer token)
@@ -22,21 +25,21 @@ sequenceDiagram
 
 On first authenticated API call the backend upserts a `user_profiles` row keyed by the token's `sub`.
 
-## 4.2 Protected analytics request `[In progress]`
+## 4.2 Protected analytics request `[Built]`
 
-The analytics endpoints exist (Phase 3) but are **unauthenticated until Phase 5**; the flow below is the target.
+Every analytics and churn route requires a verified, allow-listed Google user (`core/authorization.py`): no or bad token is 401, a valid token that is not on the allow-list is 403, and an unreachable key set is 503 (never "allow").
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant S as Streamlit page
     participant R as FastAPI route
-    participant V as Auth dependency (Phase 5)
+    participant V as Auth dependency
     participant SV as Service
     participant DB as PostgreSQL
     S->>R: GET /analytics/funnel?start=..&end=.. (Bearer jwt)
-    R->>V: verify signature, expiry, audience, issuer
-    V-->>R: user_id = sub (or 401)
+    R->>V: verify signature, expiry, audience, issuer, role, then allow-list
+    V-->>R: user_id = sub (or 401 / 403 / 503)
     R->>R: validate params (tz-aware, start before end, max 366 days) or 422
     R->>SV: funnel_report(window, window_days)
     SV->>DB: fetch needed event rows (SQLAlchemy)
@@ -47,21 +50,21 @@ sequenceDiagram
     S->>S: render Plotly chart with labelled window and denominators
 ```
 
-Errors: 401 bad/missing token · 422 invalid params · 503 DB unavailable · timeout → UI error state.
+Errors: 401 bad/missing token · 403 not on the allow-list · 422 invalid params · 503 DB unavailable · timeout → UI error state.
 
-## 4.3 Event ingestion (idempotent) `[In progress]`
+## 4.3 Event ingestion (idempotent) `[Built]`
 
-The ingestion service and its tests are built; the `POST /events` route and its authentication arrive in Phase 5. `scripts/load_events.py` calls the service directly meanwhile. The response field names below are the target; the service currently returns `received / inserted / duplicates / conflicts / rejected`.
+`POST /events` is protected by a service key (`X-API-Key`, compared in constant time; the route is closed with 503 unless `INGEST_API_KEY` is set) and capped at 5 MB and 5,000 events. `scripts/load_events.py` still calls the service directly. The response is `received / inserted / duplicates / conflicts / rejected`.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant C as Client or loader
-    participant R as POST /events (Phase 5)
+    participant R as POST /events
     participant SV as ingest_events
     participant DB as PostgreSQL
     C->>R: batch of events
-    R->>R: authenticate
+    R->>R: check X-API-Key and body size
     R->>SV: raw events
     SV->>SV: validate each row, split valid and rejected
     SV->>DB: upsert customers (earliest created_at kept)
@@ -79,7 +82,7 @@ sequenceDiagram
 
 Re-sending the same batch yields `inserted = 0`, `duplicates = n`. A DB failure rolls back and returns 5xx — never a success response.
 
-## 4.4 Churn prediction `[Built]` (authentication pending, Phase 5)
+## 4.4 Churn prediction `[Built]`
 
 Implemented in `services/prediction.py` and `api/routes/churn.py`. Predictions are not persisted yet; unknown ids return `unknown_customer` and customers with no activity in the prior 28 days return `not_eligible` instead of a score.
 

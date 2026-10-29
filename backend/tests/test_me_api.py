@@ -94,13 +94,25 @@ def test_101st_report_is_409(client):
     assert client.post("/me/reports", json=BODY, headers=B).status_code == 201
 
 
-@pytest.mark.parametrize("query", ["limit=0", "limit=101", "limit=-1", "offset=-1", "limit=x"])
+@pytest.mark.parametrize(
+    "query",
+    [
+        "limit=0",
+        "limit=101",
+        "limit=-1",
+        "offset=-1",
+        "limit=x",
+        "offset=9223372036854775808",
+        "offset=" + "9" * 30,
+    ],
+)
 def test_list_bounds_are_422(client, query):
     assert client.get(f"/me/reports?{query}", headers=A).status_code == 422
 
 
-def test_non_integer_report_id_is_422(client):
-    assert client.delete("/me/reports/abc", headers=A).status_code == 422
+@pytest.mark.parametrize("report_id", ["abc", "0", "-1", "9" * 30, "9223372036854775808"])
+def test_invalid_report_ids_are_422(client, report_id):
+    assert client.delete(f"/me/reports/{report_id}", headers=A).status_code == 422
 
 
 @pytest.mark.parametrize(
