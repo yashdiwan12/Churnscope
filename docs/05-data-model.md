@@ -103,6 +103,8 @@ Indexes (confirm with `EXPLAIN` on real queries): unique `event_id`; `(customer_
 
 ## 5.4 Rules
 
+- **RLS is on for every table** (`[Built]`, migration `0002`), with `anon`/`authenticated` grants revoked. The backend role bypasses it; the Supabase REST API roles see nothing.
+
 - Foreign keys, uniqueness, and CHECK constraints where appropriate.
 - All timestamps `timestamptz`, stored and processed in UTC.
 - Private Churnscope user data separate from analysed customer data.

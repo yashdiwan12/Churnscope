@@ -13,7 +13,7 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 | 2 | Database & ingestion | ✅ Done | 7 / 7 |
 | 3 | Analytics | ✅ Done | 6 / 6 |
 | 4 | Churn model | ✅ Done | 8 / 8 |
-| 5 | Authentication & authorization | ⬜ Not started | 0 / 7 |
+| 5 | Authentication & authorization | 🟡 In progress | 0 / 7 |
 | 6 | Dashboard | ⬜ Not started | 0 / 8 |
 | 7 | Quality & documentation | ⬜ Not started | 0 / 10 |
 
@@ -67,13 +67,13 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 - [x] Inference service and tests (endpoint open until Phase 5 adds auth)
 - [x] Post-phase review passes: three code reviews, all findings fixed and logged in the history (109 tests); data regenerated and model retrained
 
-## Phase 5 — Authentication & authorization ⬜  ([history](docs/history/phase-5-auth/history.md))
+## Phase 5 — Authentication & authorization 🟡  ([history](docs/history/phase-5-auth/history.md))
 - [ ] Google OAuth in Supabase and Google Cloud
 - [ ] Redirect URLs (local and deployed)
 - [ ] Streamlit sign-in/sign-out
 - [ ] Token verification in FastAPI
 - [ ] Owner-only access for private data
-- [ ] Document RLS/backend authorization boundary
+- [ ] Document RLS/backend authorization boundary (RLS migration `0002` applied early on 2026-10-29 and documented in doc 06; the full boundary doc and tests of the auth side are still to do)
 - [ ] Missing/expired/invalid/wrong-user tests
 
 ## Phase 6 — Dashboard ⬜  ([history](docs/history/phase-6-dashboard/history.md))

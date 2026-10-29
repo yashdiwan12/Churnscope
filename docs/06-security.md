@@ -11,7 +11,7 @@ The backend connects to Postgres with a privileged credential, so RLS does not a
 
 1. Backend verifies the JWT (signature, `exp`, `aud`, `iss`) and derives `user_id = sub`.
 2. Every query on private tables includes `WHERE user_id = :verified_user_id` (centralised in repositories).
-3. RLS is **enabled on all tables exposed through Supabase** as defence-in-depth, and the Supabase REST/Data API is not used by the frontend. Any table later exposed directly gets explicit, tested RLS policies.
+3. RLS is **enabled on all tables exposed through Supabase** as defence-in-depth `[Built]`: migration `0002_enable_rls` turns RLS on for every `public` table and revokes all `anon`/`authenticated` grants (and their default privileges). With no policies, the Supabase REST/Data API roles read and write nothing; the backend connects as `postgres`, which bypasses RLS. The frontend does not use the REST/Data API. Any table later exposed directly gets explicit, tested RLS policies. Before this migration (applied to the Supabase project on 2026-10-29) the tables had RLS off and `anon` held full privileges, so anyone with the project's public anon key could have read, changed or truncated them; nothing had been shared, so no exposure is known.
 4. Cross-user access returns 404.
 
 ## 6.3 Secrets
@@ -48,6 +48,6 @@ Commit `.env.example`, never `.env`. Rotate any leaked credential immediately.
 - [ ] Client-supplied identity cannot override verified identity
 - [ ] Logs contain no tokens or unnecessary personal data
 - [ ] CORS lists only required origins
-- [ ] RLS enabled on exposed tables and tested
+- [x] RLS enabled on exposed tables and tested (`tests/test_rls.py`; checked on the Supabase project)
 - [ ] Error responses expose no internals
 - [ ] Dependencies reviewed (`pip-audit`)
