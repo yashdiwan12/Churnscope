@@ -115,14 +115,15 @@ flowchart LR
 flowchart TD
     b(["Batch of raw events"]) --> sz{"≤ 5000 events?"}
     sz -- no --> err["Reject batch (ValueError)"]
-    sz -- yes --> v["Validate each row<br/>EventIn: name allow-list, id pattern,<br/>tz-aware timestamp to UTC,<br/>flat properties ≤ 4 KB, no extra fields"]
+    sz -- yes --> v["Validate each row<br/>EventIn: name allow-list, id pattern,<br/>tz-aware timestamp to UTC,<br/>not in the future (5 min skew) or before 2000,<br/>flat properties ≤ 4 KB, no extra fields"]
     v -- invalid --> rej["rejected: index + reason<br/>(values never echoed)"]
-    v -- valid --> cu["Resolve customers<br/>INSERT ... ON CONFLICT DO NOTHING, then SELECT ids"]
-    cu --> ins["INSERT events<br/>ON CONFLICT (event_id) DO NOTHING<br/>RETURNING id"]
+    v -- valid --> cu["Resolve customers<br/>upsert, keeping the earliest created_at, then SELECT ids"]
+    cu --> ins["INSERT events<br/>ON CONFLICT (event_id) DO NOTHING<br/>RETURNING event_id"]
+    ins --> cf["Count conflicts: duplicates whose content<br/>differs from the stored event (first write wins)"]
     ins --> ok{"DB error?"}
     ok -- yes --> rb["ROLLBACK: customers and events<br/>land together or not at all"]
-    ok -- no --> cm["COMMIT"]
-    cm --> res(["received, inserted, duplicates, rejected"])
+    cf --> ok
+    cm --> res(["received, inserted, duplicates, conflicts, rejected"])
     rej --> res
 ```
 
@@ -130,7 +131,7 @@ In words:
 
 1. Read source → 2. validate columns/types → 3. normalise timestamps (UTC) and IDs → 4. check missing/invalid → 5. validate event names and property types, cap payload size → 6. dedupe by `event_id` → 7. insert with `ON CONFLICT (event_id) DO NOTHING` in a transaction → 8. record rejected-row reasons (no sensitive data in logs).
 
-Result reports `received`, `inserted`, `duplicates`, and `rejected` (index + reason; payload values are never echoed). `[Built]` as `services/ingestion.py`; the HTTP route is not built yet.
+Result reports `received`, `inserted`, `duplicates` (event_id already stored or repeated in the batch), `conflicts` (duplicates whose content differs from what is stored; the stored row wins) and `rejected` (index + reason; payload values are never echoed). `[Built]` as `services/ingestion.py`; the HTTP route is not built yet.
 
 ## 3.5 Churn model design `[Built]`
 

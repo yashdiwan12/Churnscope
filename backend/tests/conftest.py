@@ -17,7 +17,11 @@ TEST_DB_URL = os.environ.get(
 def _ensure_database(url: str) -> None:
     """Create the test database on the same server if it does not exist yet."""
     target = make_url(url)
-    admin = create_engine(target.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    admin = create_engine(
+        target.set(database="postgres"),
+        isolation_level="AUTOCOMMIT",
+        connect_args={"connect_timeout": 5},
+    )
     try:
         with admin.connect() as conn:
             exists = conn.scalar(
@@ -29,10 +33,18 @@ def _ensure_database(url: str) -> None:
         admin.dispose()
 
 
+_db_unreachable: str | None = (
+    None  # remembered so a down database costs one timeout, not one per test
+)
+
+
 @pytest.fixture(scope="session")
 def engine():
     """Fresh schema built by the real Alembic migrations. Skips if Postgres is unreachable."""
-    eng = create_engine(TEST_DB_URL)
+    global _db_unreachable
+    if _db_unreachable:
+        pytest.skip(_db_unreachable)
+    eng = create_engine(TEST_DB_URL, connect_args={"connect_timeout": 5})
     try:
         _ensure_database(TEST_DB_URL)
         with eng.begin() as conn:
@@ -40,7 +52,10 @@ def engine():
     except OperationalError as exc:
         if os.environ.get("CI"):  # CI must exercise the DB tests, so never skip silently there
             raise
-        pytest.skip(f"Postgres not available ({type(exc).__name__}); run `docker compose up -d`")
+        _db_unreachable = (
+            f"Postgres not available ({type(exc).__name__}); run `docker compose up -d`"
+        )
+        pytest.skip(_db_unreachable)
 
     old = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = TEST_DB_URL

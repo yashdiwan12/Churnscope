@@ -34,7 +34,7 @@ Commit `.env.example`, never `.env`. Rotate any leaked credential immediately.
 | Identity spoofing via request body | `user_id` only from token; body field ignored |
 | Cross-user data access (IDOR) | Ownership filter in repositories; tests with two users |
 | Duplicate/replayed events | Unique `event_id` + `ON CONFLICT DO NOTHING` |
-| Malformed / oversized payload | Pydantic validation, size caps, event-name allow-list |
+| Malformed / oversized payload | Pydantic validation, size caps, event-name allow-list, timestamp bounds (no far-future or pre-2000 events, which would skew every default view) |
 | SQL injection | SQLAlchemy parameterised queries only; no string-built SQL |
 | Data leakage in logs/errors | Never log tokens or PII; generic error bodies; no stack traces |
 | Cross-origin abuse | CORS restricted to dashboard origin (CORS ≠ authentication) |

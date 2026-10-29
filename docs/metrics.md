@@ -54,7 +54,7 @@ Windows are `[start, end)`, tz-aware (naive timestamps -> 422), max 366 days; de
 | Endpoint | Parameters | Notes |
 |---|---|---|
 | `GET /analytics/overview` | `start`, `end` | active / new / returning users, qualifying events, daily active users |
-| `GET /analytics/funnel` | `start`, `end`, `window_days` (1-90, default 14) | customers who *signed up* in the window |
+| `GET /analytics/funnel` | `start`, `end`, `window_days` (1-90, default 14) | customers whose **first** signup is in the window (the same anchor the funnel uses) |
 | `GET /analytics/retention` | `periods` (1-26, default 8) | all signup-week cohorts; cells carry `eligible` and `complete` |
 | `GET /analytics/engagement` | `start`, `end` | see above |
 
@@ -62,4 +62,4 @@ Empty data returns zeros / `null` rates, not errors. These endpoints are **not a
 
 ## Churn label (decided in Phase 4)
 
-Not fixed yet. The working proposal in [System design](03-system-design.md) is inactivity over a future horizon on the synthetic log.
+Fixed in Phase 4: among customers active in the prior 28 days, `churn = 1` if there is no qualifying activity in the next 14 days. Definition, features, and measured results: [Model card](model_card.md).

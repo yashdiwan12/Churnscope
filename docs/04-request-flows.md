@@ -51,7 +51,7 @@ Errors: 401 bad/missing token · 422 invalid params · 503 DB unavailable · tim
 
 ## 4.3 Event ingestion (idempotent) `[In progress]`
 
-The ingestion service and its tests are built; the `POST /events` route and its authentication arrive in Phase 5. `scripts/load_events.py` calls the service directly meanwhile. The response field names below are the target; the service currently returns `received / inserted / duplicates / rejected`.
+The ingestion service and its tests are built; the `POST /events` route and its authentication arrive in Phase 5. `scripts/load_events.py` calls the service directly meanwhile. The response field names below are the target; the service currently returns `received / inserted / duplicates / conflicts / rejected`.
 
 ```mermaid
 sequenceDiagram
@@ -64,7 +64,7 @@ sequenceDiagram
     R->>R: authenticate
     R->>SV: raw events
     SV->>SV: validate each row, split valid and rejected
-    SV->>DB: upsert customers (ON CONFLICT DO NOTHING)
+    SV->>DB: upsert customers (earliest created_at kept)
     SV->>DB: INSERT events ON CONFLICT (event_id) DO NOTHING
     alt database error
         DB-->>SV: error
@@ -72,7 +72,7 @@ sequenceDiagram
         SV-->>R: raise, mapped to 5xx
     else success
         SV->>DB: COMMIT
-        SV-->>R: received, inserted, duplicates, rejected
+        SV-->>R: received, inserted, duplicates, conflicts, rejected
         R-->>C: 200 result
     end
 ```

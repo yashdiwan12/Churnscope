@@ -2,7 +2,7 @@
 
 Live tracker of implementation progress per phase. Detailed notes, decisions, and evidence live in each phase's `docs/history/<phase>/history.md`; the phase summary table is in [docs/10-project-history.md](docs/10-project-history.md).
 
-**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-10-25
+**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-10-29
 
 ## Summary
 
@@ -65,6 +65,7 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 - [x] Error and class-imbalance review
 - [x] Save model, schema, version metadata
 - [x] Inference service and tests (endpoint open until Phase 5 adds auth)
+- [x] Post-phase review passes: three code reviews, all findings fixed and logged in the history (109 tests); data regenerated and model retrained
 
 ## Phase 5 — Authentication & authorization ⬜  ([history](docs/history/phase-5-auth/history.md))
 - [ ] Google OAuth in Supabase and Google Cloud

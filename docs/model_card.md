@@ -9,9 +9,9 @@ Status: **[Built]** in `backend/app/ml/`, `backend/app/services/features.py`, `b
 | | |
 |---|---|
 | Task | Among customers active in the last 28 days, will they have **no qualifying activity in the next 14 days**? |
-| Shipped model | `churn-lr-6f4625ce88`: Logistic Regression (class-balanced) on 15 standardised behavioural features |
-| Test result | ROC-AUC **0.874**, precision 0.760, recall 0.738, F1 0.749 at threshold 0.5 (churn rate in test: 35.6%) |
-| Honest headline | It beats "always predict no churn" clearly, but **only marginally beats a one-line rule** ("last active 7 or more days ago"): F1 0.749 vs 0.742, ROC-AUC 0.874 vs 0.873 |
+| Shipped model | `churn-lr-e330fa34d3`: Logistic Regression (class-balanced) on 15 standardised behavioural features |
+| Test result | ROC-AUC **0.879**, precision 0.750, recall 0.741, F1 0.746 at threshold 0.5 (churn rate in test: 34.5%) |
+| Honest headline | It beats "always predict no churn" clearly, but it **does not clearly beat a one-line rule** ("last active 7 or more days ago"): F1 0.746 vs 0.742, ROC-AUC 0.879 vs 0.881 (the rule is slightly ahead on ROC-AUC) |
 | Served by | `POST /churn/predict` (unauthenticated until Phase 5) |
 
 ## Label and population
@@ -44,28 +44,28 @@ Not used: `plan` (the customer table has no plan loaded for the synthetic data, 
 
 ## Evaluation design
 
-- **Time-based split by cutoff:** the last 4 weekly cutoffs are test (2026-05-21 to 2026-06-11, 3,494 rows); training uses earlier cutoffs (2026-01-29 to 2026-05-07, 9,572 rows). The cutoff 2026-05-14 is dropped so every training label's 14-day horizon closes by the first test cutoff.
+- **Time-based split by cutoff:** the last 4 weekly cutoffs are test (2026-05-21 to 2026-06-11, 3,494 rows); training uses earlier cutoffs (2026-01-29 to 2026-05-07, 9,580 rows). The cutoff 2026-05-14 is dropped so every training label's 14-day horizon closes by the first test cutoff. Data: 42,847 events, 2,000 customers (synthetic, seed 42).
 - Preprocessing (standardisation) is fitted **inside the pipeline on training rows only**; a test checks this.
 - Nothing is tuned or selected on the test set. Logistic Regression was chosen up front as the interpretable baseline; Random Forest and two naive baselines are reported for comparison on the same rows.
 - **Caveat:** the same customers appear in train and test at different cutoffs, so this measures generalisation over time, not to unseen customers.
-- Class balance: 34.9% churn in train, 35.6% in test (moderate imbalance). Models use class weighting, so scores are **relative risk scores, not calibrated probabilities**.
+- Class balance: 34.9% churn in train, 34.5% in test (moderate imbalance). Models use class weighting, so scores are **relative risk scores, not calibrated probabilities**.
 
 ## Results (test set, threshold 0.5)
 
 | Model | Accuracy | Precision | Recall | F1 | ROC-AUC | PR-AUC |
 |---|---|---|---|---|---|---|
-| **Logistic Regression (shipped)** | 0.823 | 0.760 | 0.738 | 0.749 | 0.874 | 0.835 |
-| Random Forest | 0.821 | 0.751 | 0.745 | 0.748 | 0.883 | 0.836 |
-| Baseline: last active >= 7 days ago | 0.825 | 0.783 | 0.705 | 0.742 | 0.873 | 0.829 |
-| Baseline: always "no churn" | 0.644 | 0.000 | 0.000 | 0.000 | 0.500 | 0.356 |
+| **Logistic Regression (shipped)** | 0.826 | 0.750 | 0.741 | 0.746 | 0.879 | 0.829 |
+| Random Forest | 0.827 | 0.754 | 0.740 | 0.747 | 0.884 | 0.834 |
+| Baseline: last active >= 7 days ago | 0.830 | 0.780 | 0.707 | 0.742 | 0.881 | 0.827 |
+| Baseline: always "no churn" | 0.655 | 0.000 | 0.000 | 0.000 | 0.500 | 0.345 |
 
-Logistic Regression confusion matrix: TN 1,958 · FP 291 · FN 326 · TP 919.
+Logistic Regression confusion matrix: TN 1,992 · FP 297 · FN 312 · TP 893.
 
 What this does and does not show:
 
-- Accuracy alone is misleading here: always predicting "no churn" already scores 64.4%.
-- On this synthetic data **one feature (`days_since_last_activity`) carries almost all the signal**; the 15-feature model adds very little over the simple rule. Random Forest is similar (0.883 vs 0.874 ROC-AUC, within what small changes in row order move it) and overfits: train ROC-AUC 0.963 vs test 0.883, while Logistic Regression shows no gap (0.884 train vs 0.874 test).
-- Logistic Regression's standardised coefficient for `days_since_last_activity` is +2.11, far larger than any other. Several features are strongly correlated (`activity_change`, `events_last_14d`, `events_prev_14d`, `active_days_*`), so the signs of their individual coefficients are **not** reliable explanations.
+- Accuracy alone is misleading here: always predicting "no churn" already scores 65.5%.
+- On this synthetic data **one feature (`days_since_last_activity`) carries almost all the signal**; the 15-feature model adds nothing measurable over the simple rule (F1 0.746 vs 0.742, ROC-AUC 0.879 vs 0.881). Random Forest is within 0.005 ROC-AUC of Logistic Regression and overfits: train ROC-AUC 0.964 vs test 0.884, while Logistic Regression shows no gap (0.879 train vs 0.879 test).
+- Logistic Regression's standardised coefficient for `days_since_last_activity` is +2.13, far larger than any other (next largest in magnitude: 0.35). Several features are strongly correlated (`activity_change`, `events_last_14d`, `events_prev_14d`, `active_days_*`), so the signs of their individual coefficients are **not** reliable explanations.
 
 ## Error review
 
@@ -73,10 +73,10 @@ Mean feature values by outcome for the shipped model (full table in `churn_eval.
 
 | Group | n | days since last activity | events (28d) | active days (14d) |
 |---|---|---|---|---|
-| False negative (missed churn) | 326 | 2.8 | 8.5 | 3.8 |
-| False positive (false alarm) | 291 | 10.8 | 4.6 | 1.6 |
-| True positive | 919 | 16.8 | 5.1 | 0.8 |
-| True negative | 1,958 | 1.7 | 11.8 | 5.0 |
+| False negative (missed churn) | 312 | 3.1 | 8.2 | 3.9 |
+| False positive (false alarm) | 297 | 10.7 | 4.8 | 1.6 |
+| True positive | 893 | 16.9 | 5.1 | 0.8 |
+| True negative | 1,992 | 1.8 | 11.7 | 5.0 |
 
 Missed churners look like healthy, recently active customers who then went silent; that is behaviour no feature can foresee in this generator (a customer's activity stops abruptly at a random week). False alarms are customers who were quiet for about 11 days but came back within the horizon.
 
@@ -99,8 +99,8 @@ Accuracy barely moves over the majority baseline because of the class imbalance;
 - **What the hash does and does not protect.** Joblib files are pickles and can run code when loaded. The model file is read once and the hash is computed over exactly the bytes that are unpickled. The hash in `churn_model.json` sits next to the model, so it catches corruption and mismatches but **not** someone who can write to that folder. For that, set `CHURN_MODEL_SHA256` (from a trusted place such as the host's secret store); it is checked before anything is unpickled. Only artifacts we trained ourselves should ever be placed there.
 - The version (`churn-lr-…`) hashes the data fingerprint (all event columns, including `properties`), seed, split size, threshold, feature schema, windows, qualifying events and pipeline hyperparameters, so any of those changing gives a new version.
 - Serving builds features with the same `features.build_features` used in training (a test asserts API scores equal the pipeline's scores on directly built features).
-- Prediction cutoff is the start of the day after the latest event (`null` if no events exist yet). A customer with no qualifying activity in the prior 28 days is returned as `not_eligible`, not scored; unknown ids as `unknown_customer`; repeated ids are answered once. `predicted_class` is derived from the same rounded `risk_score` that is returned, so the two never disagree. Predictions are not stored (the `predictions` table is unused so far).
-- Measured latency (single runs to the Seoul-region Supabase pooler, not benchmarks): about 1 s for one customer, about 4 s for 17 customers on a first call that included connection setup.
+- Prediction cutoff is the last midnight (UTC) at or before the latest event (`null` if no events exist yet), so it always has complete data before it, as in training; the partial latest day is not used. A customer with no qualifying activity in the prior 28 days is returned as `not_eligible`, not scored; unknown ids as `unknown_customer`; repeated ids are answered once. `predicted_class` is derived from the same rounded `risk_score` that is returned, so the two never disagree. Predictions are not stored (the `predictions` table is unused so far).
+- Measured latency (single warm runs from the dev machine to the Seoul-region Supabase pooler on 2026-10-29, not benchmarks): about 0.9 s for one customer and about 1.3 s for 17 customers. One earlier run, taken while Docker Desktop was starting on the same machine, was far slower (12 to 53 s for analytics calls), so treat all of these as indicative only.
 
 ## Limitations
 
@@ -119,4 +119,4 @@ PYTHONPATH=. uv run python -m app.ml.train_telco              # needs data/raw/t
 uv run pytest -q tests/test_features.py tests/test_ml.py tests/test_churn_api.py tests/test_train_telco.py
 ```
 
-The same seed and data give the same `model_version`, test metrics, and coefficients (tested). Training from the database and from the CSV gives identical metrics but different versions, because the fingerprint hashes customer ids as given (internal ids vs external ids). Random Forest figures can move in the third decimal if the row order of the input changes; Logistic Regression does not.
+The same seed and data give the same `model_version`, test metrics, and coefficients (tested). Training from the database and from the CSV gave identical Logistic Regression metrics, while Random Forest figures differed in the third decimal between the two (0.884 vs 0.883 ROC-AUC, measured on the earlier data); the versions differ because the fingerprint hashes customer ids as given (internal ids vs external ids).

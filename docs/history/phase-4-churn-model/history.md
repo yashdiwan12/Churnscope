@@ -26,6 +26,8 @@
 - Endpoint is open until Phase 5, like the analytics routes.
 
 ## Evidence
+
+> Superseded: the figures in this section describe the first dataset (42,580 events, version `churn-lr-131edb7229`). After the second review the generator was fixed and the data regenerated; current figures are in "Second review and data regeneration" below and in the [model card](../../model_card.md).
 - `uv run pytest -q`: 76 passed; ruff clean.
 - Synthetic log (42,580 events, 2,000 customers), test cutoffs 2026-05-21..06-11 (3,494 rows, 35.6% churn): Logistic Regression ROC-AUC 0.874, precision 0.760, recall 0.738, F1 0.749; Random Forest ROC-AUC 0.883, F1 0.748 (train ROC-AUC 0.963, overfits); rule baseline ROC-AUC 0.873, F1 0.742; majority baseline F1 0.
 - Finding: the model adds little over the simple inactivity rule on this synthetic data; one feature carries almost all the signal. Recorded in the model card, not hidden.
@@ -51,3 +53,18 @@ A code review of `backend/` found 10 issues; all verified and the following fixe
 - **Database outage gave a generic 500** (known gap, not from the review): added a `DatabaseUnavailable` error and handlers so DB failures return 503 `Database unavailable` without connection details; 10 s connect timeout. Tested for analytics and predict, with an unreachable and an unconfigured database (suite: 94 -> 101 tests).
 - Expected sklearn warnings for single-class metrics are now silenced inside the helper (the value is already reported as `null`). The remaining test warning is Starlette's `httpx` deprecation notice (third-party).
 - Not fixed here: `/churn/predict` (and analytics) are unauthenticated, which is Phase 5's job.
+
+## Second review and data regeneration (2026-10-25 to 2026-10-29)
+
+An independent reviewer (superpowers requesting-code-review, whole `backend/`) found no critical issues and two important ones; all items were verified and fixed with tests (suite 94 -> 109):
+
+- **Generator drew funnel events out of order** (important): 26% of customers with both events had `report_created` before `onboarding_complete`, deflating the last funnel step. Fixed: report follows onboarding, and `report_shared` (previously never emitted, so its feature was constant 0) follows the report.
+- **Ingestion accepted any timestamp** (important): one far-future event would have moved `data_through` and emptied default views. Now rejected beyond 5 minutes of skew or before 2000.
+- Tests now use a separate `churnscope_test` database (the fixture drops its schema, which previously wiped the dev DB); a failed DB connection is cached so a down database no longer stalls the run for minutes.
+- Serving cutoff is the last full midnight, not the start of the next day (the unobserved rest of the day was being counted as inactivity, inflating the dominant feature).
+- Artifact check also verifies the qualifying-event list; ingestion reports `conflicts` (same `event_id`, different content) and keeps the earliest `created_at`; funnel scope uses each customer's first signup.
+- With approval, the Supabase `events`/`customers` tables were truncated and reloaded with the regenerated data (42,847 events; re-run inserted 0, conflicts 0), and the model retrained: `churn-lr-e330fa34d3`.
+
+New measured results (test cutoffs 2026-05-21..06-11, 3,494 rows, 34.5% churn): Logistic Regression ROC-AUC 0.879, precision 0.750, recall 0.741, F1 0.746; Random Forest ROC-AUC 0.884, F1 0.747 (train ROC-AUC 0.964); inactivity-rule baseline ROC-AUC 0.881, F1 0.742; majority baseline F1 0. The model does not clearly beat the one-line rule (the rule is slightly ahead on ROC-AUC); the model card says so.
+
+Live check (single warm runs): 8 scored / 8 not eligible / 1 unknown of 17 ids; ~1.3 s for 17 customers, ~0.9 s for one.

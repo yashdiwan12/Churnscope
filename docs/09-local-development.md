@@ -69,9 +69,11 @@ curl -X POST localhost:8000/churn/predict -H 'Content-Type: application/json' -d
 ## 9.5 Tests
 
 ```bash
-cd backend && uv run pytest -q   # DB tests need `docker compose up -d`; they skip otherwise
+cd backend && uv run pytest -q   # DB tests need Docker Postgres up; if the summary shows "skipped", it is down (`docker compose up -d`)
 cd backend && uv run ruff check . && uv run ruff format --check .
 ```
+
+Database tests use their own `churnscope_test` database on the same Postgres (created automatically; its schema is dropped on every run), so running the tests never touches data you loaded into `churnscope`. Under `CI` a missing database fails the run instead of skipping.
 
 Coverage targets: ingestion (valid/invalid/duplicate), analytics (hand-checked cases), auth (missing/expired/wrong user), ML (schema parity, no leakage).
 

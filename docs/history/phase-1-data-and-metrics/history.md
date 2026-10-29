@@ -20,5 +20,7 @@
 
 - 2026-10-24: downloaded the Telco CSV (IBM GitHub repo) to `data/raw/telco_churn.csv` and inspected it: 7,043 x 21, unique IDs, no duplicates or nulls, 11 blank `TotalCharges` (all tenure 0), churn 26.54%. Findings and modelling implications are in `docs/data_dictionary.md`.
 
+- Note (2026-10-25): the synthetic log was regenerated after a review found funnel events drawn out of order (42,580 -> 42,847 events). Figures above are from the earlier version; see the Phase 4 log for the current data.
+
 ## Open items
 None.

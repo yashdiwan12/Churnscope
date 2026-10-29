@@ -22,6 +22,8 @@
 - Live run on the Supabase copy of the seed-42 synthetic log (default window 2026-05-31..06-30): 815 active users, 196 new, 623 returning; funnel 196 -> 147 -> 64 eligible-user counts. These reflect generator assumptions, not real behaviour.
 - Latency (single runs from the dev machine to the Seoul-region Supabase pooler, not benchmarks): overview/engagement ~1.2-1.5 s warm after a SQL-side window filter (first call ~5 s incl. connection setup); funnel and retention ~4 s because they read the full history.
 
+- Re-measured 2026-10-29 on the regenerated data (42,847 events; warm single runs, indicative only): overview ~1.0 s, funnel ~1.5 s, retention ~1.4 s. Default window: 816 active, 196 new, 625 returning; funnel 196 -> 147 -> 88 eligible-user counts (the earlier 64 for the last step was an artifact of the generator drawing events out of order). One earlier run during Docker Desktop startup took 12-53 s, so latency numbers are load-dependent.
+
 ## Open items
 - Funnel/retention fetch full history; move to SQL aggregation or caching if latency matters. Add indexes only after `EXPLAIN` on those queries.
 - Add auth dependency to the router in Phase 5.

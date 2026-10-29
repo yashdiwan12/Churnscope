@@ -1,12 +1,12 @@
 {
-  "artifact_sha256": "317440fc90b00b78c23baada036c6f36fa2f21a27ecd2819ad3f1ff1423a2a7d",
-  "created_at": "2026-10-24T20:44:01+00:00",
+  "artifact_sha256": "84729981e5420ed34aa7f9f31b9c94e0f6dceeb6c31030cb64fc5ee5aab4e5fd",
+  "created_at": "2026-10-25T16:29:26+00:00",
   "data": {
     "first_event": "2026-01-01T04:18:34+00:00",
-    "last_event": "2026-06-29T23:56:48.742967+00:00",
+    "last_event": "2026-06-29T23:59:53.023584+00:00",
     "n_customers": 2000,
-    "n_events": 42580,
-    "sha256": "84b0a39d6f8e5ae4010d3d39d62a059f34d32fb4be499d23bfd385d8bda8da87",
+    "n_events": 42847,
+    "sha256": "6ea8f91a30f8a364f1fe6084a73dea4e9f4547ae06a7b8d1bc815598232f3331",
     "synthetic": true
   },
   "decision_threshold": 0.5,
@@ -41,7 +41,7 @@
     "window_days": 28
   },
   "model_type": "LogisticRegression(class_weight=balanced) on standardised features",
-  "model_version": "churn-lr-6f4625ce88",
+  "model_version": "churn-lr-e330fa34d3",
   "numpy_version": "2.5.4",
   "pandas_version": "3.1.0",
   "python_version": "3.14.3",
@@ -52,7 +52,7 @@
       "2026-05-14"
     ],
     "note": "Time-based split by cutoff date; train labels close before the first test cutoff. The same customers can appear in train and test at different cutoffs.",
-    "test_churn_rate": 0.3563,
+    "test_churn_rate": 0.3449,
     "test_cutoffs": [
       "2026-05-21",
       "2026-05-28",
@@ -60,7 +60,7 @@
       "2026-06-11"
     ],
     "test_rows": 3494,
-    "train_churn_rate": 0.349,
+    "train_churn_rate": 0.3486,
     "train_cutoffs": [
       "2026-01-29",
       "2026-02-05",
@@ -78,24 +78,24 @@
       "2026-04-30",
       "2026-05-07"
     ],
-    "train_rows": 9572
+    "train_rows": 9580
   },
   "test_metrics": {
-    "accuracy": 0.823411562678878,
-    "base_rate": 0.35632512879221523,
+    "accuracy": 0.8257012020606754,
+    "base_rate": 0.3448769318832284,
     "confusion_matrix": {
-      "fn": 326,
-      "fp": 291,
-      "tn": 1958,
-      "tp": 919
+      "fn": 312,
+      "fp": 297,
+      "tn": 1992,
+      "tp": 893
     },
-    "f1": 0.7486761710794297,
+    "f1": 0.7457202505219207,
     "n": 3494,
-    "positives": 1245,
-    "pr_auc": 0.8348183046684126,
-    "precision": 0.759504132231405,
-    "recall": 0.738152610441767,
-    "roc_auc": 0.873787011094623,
+    "positives": 1205,
+    "pr_auc": 0.8286955946750103,
+    "precision": 0.7504201680672269,
+    "recall": 0.7410788381742739,
+    "roc_auc": 0.8794465321245937,
     "threshold": 0.5
   },
   "window_days": 28
