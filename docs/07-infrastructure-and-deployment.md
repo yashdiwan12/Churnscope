@@ -60,7 +60,7 @@ Per-environment values live in each host's secret store, never in Git. Streamlit
 
 ## 7.4 CI (GitHub Actions)
 
-On push/PR (`.github/workflows/ci.yml`): `uv sync` → ruff check and format check → `pytest` in `backend/` (and ruff in `frontend/`). The backend job starts a Postgres 16 service container and sets `TEST_DATABASE_URL`; under `CI` the DB tests fail rather than skip when the database is unreachable. Tests never touch the production Supabase project. `[Built]` but not yet run on GitHub, since nothing has been pushed.
+On push/PR (`.github/workflows/ci.yml`): `uv sync` → ruff check and format check → `pytest` in `backend/` (and ruff in `frontend/`). The backend job starts a Postgres 16 service container and sets `TEST_DATABASE_URL`; under `CI` the DB tests fail rather than skip when the database is unreachable. Tests never touch the production Supabase project. `[Built]`. First GitHub run on 2026-10-29 passed (backend 112 tests with the Postgres service, frontend lint).
 
 ## 7.5 Migrations
 
