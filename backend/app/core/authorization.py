@@ -4,6 +4,8 @@
 `user_profiles` row that `saved_reports.user_id` points at.
 """
 
+import hashlib
+import hmac
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException
@@ -73,3 +75,17 @@ def current_profile(
     profile = session.get(UserProfile, user.id)
     assert profile is not None
     return profile
+
+
+def ingest_key(x_api_key: Annotated[str | None, Header()] = None) -> None:
+    """Service key for event producers. Closed (503) unless a key is configured."""
+    expected = get_settings().ingest_api_key
+    if not expected:
+        raise HTTPException(503, "Ingestion is not configured")
+    supplied = x_api_key or ""
+    # Compare fixed-length digests so neither length nor content leaks through timing.
+    ok = hmac.compare_digest(
+        hashlib.sha256(supplied.encode()).digest(), hashlib.sha256(expected.encode()).digest()
+    )
+    if not supplied or not ok:
+        raise NOT_AUTHENTICATED
