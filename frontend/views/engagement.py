@@ -35,7 +35,7 @@ def render(api: ApiClient) -> None:
         return
 
     n = f"(n={active:,})"
-    st.caption(f"Active users: {active:,} {n}")
+    st.caption(f"Active users: {active:,}")
     st.caption(f"Active days per user (mean): {_number(result['active_days_per_user_mean'])} {n}")
     st.caption(
         f"Active days per user (median): {_number(result['active_days_per_user_median'])} {n}"

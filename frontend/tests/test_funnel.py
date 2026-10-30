@@ -39,7 +39,8 @@ def test_funnel_renders_steps_conversions_denominator_and_note(monkeypatch):
     assert BANNER in shown
     assert "Window: 1 Oct to 30 Oct 2026 (30 days)" in shown
     assert "Data through 30 Oct 2026" in shown
-    assert "Eligible users: 200 (n=200)" in shown
+    assert "Eligible users: 200" in shown
+    assert "Eligible users: 200 (n=200)" not in shown
     assert "signup: 200 users, 100.0% from start" in shown
     assert "first_report: 50 users, 25.0% from previous (n=200), 25.0% from start (n=200)" in shown
     assert "export: 5 users, 10.0% from previous (n=50), 2.5% from start (n=200)" in shown

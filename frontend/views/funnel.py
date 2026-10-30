@@ -32,7 +32,7 @@ def render(api: ApiClient) -> None:
         return
 
     eligible = result["eligible_users"]
-    st.caption(f"Eligible users: {eligible:,} (n={eligible:,})")
+    st.caption(f"Eligible users: {eligible:,}")
     figure = funnel_bar(steps)
     if figure is not None:
         st.plotly_chart(figure, width="stretch")

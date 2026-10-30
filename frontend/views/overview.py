@@ -43,4 +43,5 @@ def render(api: ApiClient) -> None:
     if figure is not None:
         st.plotly_chart(figure, width="stretch")
     names = ", ".join(result["qualifying_event_names"])
-    st.caption(f"Activity means any of these events: {names}")
+    with st.expander("What counts as activity"):
+        st.caption(f"Activity means any of these events: {names}")

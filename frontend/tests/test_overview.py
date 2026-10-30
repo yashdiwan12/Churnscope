@@ -23,7 +23,11 @@ def test_overview_renders_labels_denominators_and_banner(monkeypatch):
     assert metrics["Returning users"] == "90"
     assert metrics["Qualifying events"] == "4,321"
     assert "75.0% of active users (n=120)" in shown
-    assert "login, report_viewed" in shown
+    box = [e for e in at.expander if e.label == "What counts as activity"]
+    assert len(box) == 1 and box[0].proto.expanded is False
+    inside = " ".join(str(el.value) for el in box[0].get("caption"))
+    assert "login, report_viewed" in inside
+    assert "login, report_viewed" not in shown.replace(inside, "")
     assert len(at.get("plotly_chart")) == 1
 
 

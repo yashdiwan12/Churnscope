@@ -35,7 +35,8 @@ def test_engagement_renders_metrics_with_n_and_adoption(monkeypatch):
     assert BANNER in shown
     assert "Window: 1 Oct to 30 Oct 2026 (30 days)" in shown
     assert "Data through 30 Oct 2026" in shown
-    assert "Active users: 120 (n=120)" in shown
+    assert "Active users: 120" in shown
+    assert "Active users: 120 (n=120)" not in shown
     assert "Active days per user (mean): 4.3 (n=120)" in shown
     assert "Active days per user (median): 3.0 (n=120)" in shown
     assert "Events per active user: 36.0 (n=120)" in shown
