@@ -7,6 +7,7 @@ from charts import (
     funnel_bar,
     retention_heatmap,
     retention_matrix,
+    risk_histogram,
 )
 
 
@@ -101,3 +102,27 @@ def test_adoption_bars_sorted_descending_with_one_decimal_percent_text():
     assert list(bar.x) == [0.9, 0.425, 0.05]
     assert list(bar.text) == ["90.0%", "42.5%", "5.0%"]
     assert "active users" in fig.layout.xaxis.title.text
+
+
+def _bins(counts):
+    return [
+        {"bin_start": i / 10, "bin_end": (i + 1) / 10, "count": c} for i, c in enumerate(counts)
+    ]
+
+
+def test_risk_histogram_none_when_all_counts_zero():
+    assert risk_histogram(_bins([0] * 10), 0.5) is None
+    assert risk_histogram([], 0.5) is None
+
+
+def test_risk_histogram_has_ten_bins_threshold_line_and_labels():
+    fig = risk_histogram(_bins([30, 25, 20, 15, 12, 8, 5, 3, 1, 1]), 0.5)
+    assert isinstance(fig, go.Figure)
+    assert list(fig.data[0].y) == [30, 25, 20, 15, 12, 8, 5, 3, 1, 1]
+    assert len(fig.data[0].x) == 10
+    lines = [s for s in fig.layout.shapes if s.type == "line"]
+    assert len(lines) == 1
+    assert lines[0].x0 == lines[0].x1 == 0.5
+    assert fig.layout.xaxis.title.text == "risk score (relative)"
+    assert fig.layout.yaxis.title.text == "customers"
+    assert "probability" not in fig.to_json().lower()

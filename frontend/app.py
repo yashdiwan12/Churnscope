@@ -3,7 +3,7 @@ from functools import partial
 import streamlit as st
 
 import gate
-from views import engagement, funnel, overview, retention
+from views import churn, engagement, funnel, overview, retention
 
 BANNER = "Demo data: synthetic events from a seeded generator, not real customers."
 
@@ -13,6 +13,7 @@ PAGES = [
     (funnel, "Funnel", "funnel"),
     (retention, "Retention", "retention"),
     (engagement, "Engagement", "engagement"),
+    (churn, "Churn Risk", "churn-risk"),
 ]
 
 st.set_page_config(page_title="Churnscope", layout="wide")

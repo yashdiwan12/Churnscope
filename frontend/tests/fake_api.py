@@ -157,3 +157,45 @@ RETENTION_OK = {
         _cell("2026-10-19", 1, 0, 0, complete=False, size=30),
     ],
 }
+
+
+def _bin(i, count):
+    return {"bin_start": i / 10, "bin_end": (i + 1) / 10, "count": count}
+
+
+def _risk_row(rank, customer_id, score, predicted_class):
+    return {
+        "rank": rank,
+        "customer_id": customer_id,
+        "risk_score": score,
+        "predicted_class": predicted_class,
+    }
+
+
+AT_RISK_OK = {
+    "model_version": "churn-lr-e330fa34d3",
+    "cutoff": "2026-10-30T00:00:00+00:00",
+    "data_through": "2026-10-30T18:00:00+00:00",
+    "window_days": 28,
+    "horizon_days": 30,
+    "decision_threshold": 0.5,
+    "eligible_customers": 120,
+    "at_risk_count": 18,
+    "score_histogram": [_bin(i, c) for i, c in enumerate([30, 25, 20, 15, 12, 8, 5, 3, 1, 1])],
+    "rows": [
+        _risk_row(1, "cust-001", 0.93, "churn"),
+        _risk_row(2, "cust-002", 0.88, "churn"),
+        _risk_row(3, "cust-003", 0.41, "no_churn"),
+    ],
+    "evaluation": {
+        "roc_auc": 0.879,
+        "f1": 0.746,
+        "precision": 0.7,
+        "recall": 0.8,
+        "threshold": 0.5,
+        "test_churn_rate": 0.35,
+        "n": 400,
+        "synthetic": True,
+    },
+    "caveat": "Scores rank customers by relative risk; they are not calibrated probabilities.",
+}

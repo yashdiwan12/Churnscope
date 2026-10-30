@@ -164,3 +164,32 @@ def retention_heatmap(matrix: pd.DataFrame) -> go.Figure | None:
         margin={"t": 40, "b": 40},
     )
     return fig
+
+
+def risk_histogram(bins: list[dict], threshold: float) -> go.Figure | None:
+    """Customers per risk-score bin with a vertical line at the decision threshold."""
+    if not bins or all(row["count"] == 0 for row in bins):
+        return None
+    fig = go.Figure(
+        go.Bar(
+            x=[(row["bin_start"] + row["bin_end"]) / 2 for row in bins],
+            y=[row["count"] for row in bins],
+            width=[row["bin_end"] - row["bin_start"] for row in bins],
+            customdata=[f"{row['bin_start']:.1f} to {row['bin_end']:.1f}" for row in bins],
+            hovertemplate="risk score (relative) %{customdata}<br>%{y} customers<extra></extra>",
+            name="Customers",
+        )
+    )
+    fig.add_vline(
+        x=threshold,
+        line_dash="dash",
+        annotation_text=f"decision threshold {threshold:.2f}",
+    )
+    fig.update_layout(
+        title="Customers by risk score (relative)",
+        xaxis_title="risk score (relative)",
+        yaxis_title="customers",
+        xaxis={"range": [0, 1]},
+        margin={"t": 40, "b": 40},
+    )
+    return fig
