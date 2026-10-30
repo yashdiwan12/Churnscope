@@ -96,5 +96,5 @@ def test_engagement_date_range_reaches_the_request(monkeypatch):
     run(at)
     calls = [q for p, q in zip(requested, requested.queries) if p == "/analytics/engagement"]
     assert calls
-    assert calls[-1]["start"].startswith("2026-10-05")
-    assert calls[-1]["end"].startswith("2026-10-2")
+    assert calls[-1]["start"] == "2026-10-05T00:00:00Z"
+    assert calls[-1]["end"] == "2026-10-21T00:00:00Z"
