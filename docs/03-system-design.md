@@ -183,7 +183,7 @@ flowchart LR
 frontend/
 ├── app.py            entry, sign-in/out, session state
 ├── api_client.py     httpx wrapper: token header, timeouts, error mapping
-└── pages/            Overview · Funnels · Retention · Engagement · Churn Risk · My Workspace (P1)
+└── views/            (st.navigation) Overview · Funnels · Retention · Engagement · Churn Risk · My Workspace (P1)
 ```
 
 ```mermaid
