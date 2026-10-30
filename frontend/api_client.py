@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 TIMEOUT = 10
+ANALYTICS_TIMEOUT = 30
 
 
 class NotSignedIn(Exception):
@@ -34,22 +35,26 @@ class ApiClient:
         self._get_token = get_token
         self._http = http or httpx.Client()
 
-    def get(self, path: str, **params: Any) -> Any:
-        return self._request("GET", path, params=params)
+    def get(self, path: str, *, timeout: float | None = None, **params: Any) -> Any:
+        return self._request("GET", path, timeout=timeout, params=params)
 
-    def post(self, path: str, json: Any = None) -> Any:
-        return self._request("POST", path, json=json)
+    def post(self, path: str, json: Any = None, *, timeout: float | None = None) -> Any:
+        return self._request("POST", path, timeout=timeout, json=json)
 
-    def delete(self, path: str) -> Any:
-        return self._request("DELETE", path)
+    def delete(self, path: str, *, timeout: float | None = None) -> Any:
+        return self._request("DELETE", path, timeout=timeout)
 
-    def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+    def _request(self, method: str, path: str, timeout: float | None, **kwargs: Any) -> Any:
         headers = {}
         if token := self._get_token():
             headers["Authorization"] = f"Bearer {token}"
         try:
             response = self._http.request(
-                method, f"{self._base}{path}", headers=headers, timeout=TIMEOUT, **kwargs
+                method,
+                f"{self._base}{path}",
+                headers=headers,
+                timeout=TIMEOUT if timeout is None else timeout,
+                **kwargs,
             )
         except httpx.HTTPError:
             raise ServiceUnavailable("The service is unavailable") from None

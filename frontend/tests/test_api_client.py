@@ -43,3 +43,30 @@ def test_error_text_never_contains_the_token():
     with pytest.raises(NotSignedIn) as exc:
         client_for(lambda r: httpx.Response(401)).get("/me")
     assert "TOK" not in str(exc.value)
+
+
+def _timeout_seen(call) -> dict:
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(request.extensions["timeout"])
+        seen["query"] = dict(request.url.params)
+        return httpx.Response(200, json={})
+
+    call(client_for(handler))
+    return seen
+
+
+def test_per_call_timeout_is_used_and_not_sent_as_query():
+    seen = _timeout_seen(lambda c: c.get("/x", timeout=30, limit=5))
+    assert seen["read"] == 30
+    assert seen["query"] == {"limit": "5"}
+
+
+def test_default_timeout_is_unchanged():
+    assert _timeout_seen(lambda c: c.get("/x"))["read"] == 10
+
+
+def test_post_and_delete_accept_timeout():
+    assert _timeout_seen(lambda c: c.post("/x", json={}, timeout=30))["read"] == 30
+    assert _timeout_seen(lambda c: c.delete("/x", timeout=30))["read"] == 30
