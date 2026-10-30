@@ -2,6 +2,8 @@
 
 import plotly.graph_objects as go
 
+from labels import percent
+
 LOW_N_MIN_ELIGIBLE = 20  # a retention cell with fewer eligible users is labelled "low n"
 
 
@@ -26,15 +28,11 @@ def dau_line(daily_active_users: list[dict]) -> go.Figure | None:
     return fig
 
 
-def _percent(fraction: float | None) -> str:
-    return "n/a" if fraction is None else f"{fraction * 100:.1f}%"
-
-
 def funnel_bar(steps: list[dict]) -> go.Figure | None:
     if not steps or steps[0]["users"] == 0:
         return None
     labels = [
-        f"{row['users']:,} ({_percent(row['conversion_from_start'])} of start)" for row in steps
+        f"{row['users']:,} ({percent(row['conversion_from_start'])} of start)" for row in steps
     ]
     fig = go.Figure(
         go.Bar(

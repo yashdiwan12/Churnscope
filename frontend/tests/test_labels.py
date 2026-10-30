@@ -1,4 +1,4 @@
-from labels import cohorts_label, cutoff_label, freshness_label, window_label
+from labels import cohorts_label, cutoff_label, freshness_label, percent, window_label
 
 
 def test_window_label_shows_inclusive_end():
@@ -34,3 +34,11 @@ def test_cutoff_label():
         == "Scored at cutoff 30 Oct 2026 using the 28 days before it"
     )
     assert cutoff_label(None, 28) == "No data yet"
+
+
+def test_percent_one_decimal_and_na_for_none():
+    assert percent(None) == "n/a"
+    assert percent(0.0) == "0.0%"
+    assert percent(0.25) == "25.0%"
+    assert percent(1.0) == "100.0%"
+    assert percent(0.12345) == "12.3%"

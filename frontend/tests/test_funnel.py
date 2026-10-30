@@ -86,3 +86,14 @@ def test_funnel_invalid_range_makes_no_funnel_call(monkeypatch):
     shown = texts(run(at))
     assert "The start date must be on or before the end date." in shown
     assert "/analytics/funnel" not in requested
+
+
+def test_funnel_window_days_reaches_the_request(monkeypatch):
+    at, requested = funnel_app(monkeypatch)
+    run(at)
+    calls = [q for p, q in zip(requested, requested.queries) if p == "/analytics/funnel"]
+    assert str(calls[-1]["window_days"]) == "14"
+    at.sidebar.slider[0].set_value(30)
+    run(at)
+    calls = [q for p, q in zip(requested, requested.queries) if p == "/analytics/funnel"]
+    assert str(calls[-1]["window_days"]) == "30"

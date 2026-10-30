@@ -69,12 +69,23 @@ FUNNEL_OK = {
 }
 
 
-def install(monkeypatch, routes: dict[str, tuple[int, dict | None]]) -> list[str]:
-    requested: list[str] = []
+class Requested(list):
+    """The requested paths (a plain list of str); `.queries` holds each request's query dict."""
+
+    def __init__(self):
+        super().__init__()
+        self.queries: list[dict[str, str]] = []
+
+
+def install(monkeypatch, routes: dict[str, tuple[int, dict | None]]) -> Requested:
+    requested = Requested()
 
     def fake_request(self, method, url, **kwargs):
         path = httpx.URL(str(url)).path
         requested.append(path)
+        requested.queries.append(
+            dict(httpx.URL(str(url)).params) | dict(kwargs.get("params") or {})
+        )
         if path not in routes:
             raise AssertionError(f"unexpected request to {path}")
         status, body = routes[path]

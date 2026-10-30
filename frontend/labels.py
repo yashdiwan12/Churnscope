@@ -5,6 +5,11 @@ from datetime import datetime, timedelta
 NO_DATA = "No data yet"
 
 
+def percent(value: float | None) -> str:
+    """A fraction as a percentage to one decimal (0.25 -> 25.0%); n/a when there is none."""
+    return "n/a" if value is None else f"{value * 100:.1f}%"
+
+
 def _parse(ts: str) -> datetime:
     return datetime.fromisoformat(ts)
 

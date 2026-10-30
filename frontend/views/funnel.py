@@ -6,12 +6,8 @@ import data
 from api_client import ApiClient, ApiError, NotAllowed, NotSignedIn, ServiceUnavailable
 from charts import funnel_bar
 from filters import date_range_sidebar
-from labels import freshness_label, window_label
+from labels import freshness_label, percent, window_label
 from states import render_empty, render_error
-
-
-def _percent(fraction: float | None) -> str:
-    return "n/a" if fraction is None else f"{fraction * 100:.1f}%"
 
 
 def render(api: ApiClient) -> None:
@@ -44,9 +40,9 @@ def render(api: ApiClient) -> None:
     for row in steps:
         line = f"{row['step']}: {row['users']:,} users"
         if previous_users is not None:
-            line += f", {_percent(row['conversion_from_previous'])} from previous"
+            line += f", {percent(row['conversion_from_previous'])} from previous"
             line += f" (n={previous_users:,})"
-        line += f", {_percent(row['conversion_from_start'])} from start (n={steps[0]['users']:,})"
+        line += f", {percent(row['conversion_from_start'])} from start (n={steps[0]['users']:,})"
         st.caption(line)
         previous_users = row["users"]
     st.caption(result["note"])
