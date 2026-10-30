@@ -4,7 +4,7 @@ Product analytics and churn-intelligence platform: turns user-activity events in
 
 ## Status
 
-Phases 0-4 are done (setup, data and metric definitions, database and idempotent ingestion, analytics API, churn model with inference endpoint; see the [model card](docs/model_card.md) for measured results and limitations). Phase 5 (Google sign-in via Supabase, authorization) is in progress: row-level security is already enabled on all tables, and the design spec is written ([spec](docs/superpowers/specs/2026-10-29-phase5-auth-design.md)); **the analytics and churn endpoints are unauthenticated until it lands**. Dashboard and deployment are still to come. Live tracker: [progress.md](progress.md).
+Phases 0-5 are done (setup, data and metric definitions, database and idempotent ingestion, analytics API, churn model with inference endpoint; see the [model card](docs/model_card.md) for measured results and limitations). Phase 5 is done too: Google sign-in through Supabase (PKCE), an email allow-list, owner-only saved reports, and a service-key `POST /events`; every analytics and churn route now requires a signed-in, allow-listed user. Dashboard and deployment are still to come. Live tracker: [progress.md](progress.md).
 
 The event data is **synthetic** (seeded generator); funnel and retention figures reflect its assumptions, not real customer behaviour. The IBM Telco dataset is used only as a supplementary tabular churn dataset (see [data/README.md](data/README.md)).
 

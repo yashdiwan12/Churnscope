@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from app.db.session import get_session
 from app.main import create_app
 from app.services.ingestion import ingest_events
+from tests.auth_helpers import act_as_allowed_user
 
 ROWS = [
     ("A", "signup", "2026-01-05"),
@@ -45,6 +46,7 @@ def client(session):
     )
     app = create_app()
     app.dependency_overrides[get_session] = lambda: session
+    act_as_allowed_user(app)
     return TestClient(app)
 
 
@@ -52,6 +54,7 @@ def client(session):
 def empty_client(session):
     app = create_app()
     app.dependency_overrides[get_session] = lambda: session
+    act_as_allowed_user(app)
     return TestClient(app)
 
 

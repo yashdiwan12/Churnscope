@@ -36,7 +36,7 @@ flowchart LR
 cd backend && uv run uvicorn app.main:app --reload --port 8000   # docs at /docs
 
 # Frontend (second terminal)
-cd frontend && uv run streamlit run app.py                       # http://localhost:8501
+cd frontend && uv run --env-file ../.env streamlit run app.py    # http://localhost:8501 (sign-in needs SUPABASE_URL and SUPABASE_ANON_KEY)
 ```
 
 ## 9.4 Data
@@ -69,6 +69,7 @@ curl -X POST localhost:8000/churn/predict -H 'Content-Type: application/json' -d
 ## 9.5 Tests
 
 ```bash
+cd frontend && uv run pytest -q  # no network or database needed
 cd backend && uv run pytest -q   # DB tests need Docker Postgres up; if the summary shows "skipped", it is down (`docker compose up -d`)
 cd backend && uv run ruff check . && uv run ruff format --check .
 ```

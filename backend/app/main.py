@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import InterfaceError, OperationalError
 
-from app.api.routes import analytics, churn, health
+from app.api.routes import analytics, churn, events, health, me
 from app.core.config import get_settings
 from app.db.session import DatabaseUnavailable
 from app.ml import artifact
@@ -55,6 +55,8 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(analytics.router)
     app.include_router(churn.router)
+    app.include_router(me.router)
+    app.include_router(events.router)
     return app
 
 

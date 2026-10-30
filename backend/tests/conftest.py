@@ -77,4 +77,8 @@ def session(engine):
     with Session(engine) as s:
         yield s
     with engine.begin() as conn:
-        conn.execute(text("TRUNCATE events, customers RESTART IDENTITY CASCADE"))
+        conn.execute(
+            text(
+                "TRUNCATE events, customers, saved_reports, user_profiles RESTART IDENTITY CASCADE"
+            )
+        )

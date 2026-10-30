@@ -5,12 +5,12 @@ import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.core.authorization import current_user
 from app.db.session import get_session
 from app.schemas.analytics import EngagementOut, FunnelOut, OverviewOut, RetentionOut
 from app.services import analytics
 
-# Phase 5 attaches the verified-token dependency here (`dependencies=[Depends(...)]`).
-router = APIRouter(prefix="/analytics", tags=["analytics"])
+router = APIRouter(prefix="/analytics", tags=["analytics"], dependencies=[Depends(current_user)])
 
 SessionDep = Annotated[Session, Depends(get_session)]
 

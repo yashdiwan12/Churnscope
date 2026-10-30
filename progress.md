@@ -2,7 +2,7 @@
 
 Live tracker of implementation progress per phase. Detailed notes, decisions, and evidence live in each phase's `docs/history/<phase>/history.md`; the phase summary table is in [docs/10-project-history.md](docs/10-project-history.md).
 
-**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-10-29 · verified: 112 backend tests pass, ruff clean, live Supabase checked
+**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-10-30 · verified: 247 backend + 24 frontend tests pass, ruff clean, real Google sign-in and sign-out checked
 
 ## Summary
 
@@ -13,7 +13,7 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 | 2 | Database & ingestion | ✅ Done | 7 / 7 |
 | 3 | Analytics | ✅ Done | 6 / 6 |
 | 4 | Churn model | ✅ Done | 8 / 8 |
-| 5 | Authentication & authorization | 🟡 In progress | 0 / 7 |
+| 5 | Authentication & authorization | ✅ Done | 8 / 8 |
 | 6 | Dashboard | ⬜ Not started | 0 / 8 |
 | 7 | Quality & documentation | ⬜ Not started | 0 / 10 |
 
@@ -67,16 +67,17 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 - [x] Inference service and tests (endpoint open until Phase 5 adds auth)
 - [x] Post-phase review passes: two independent code reviews, all findings fixed and logged in the history; data regenerated and model retrained
 
-## Phase 5 — Authentication & authorization 🟡  ([history](docs/history/phase-5-auth/history.md))
-- [x] Early hardening: RLS enabled on all tables and `anon`/`authenticated` grants revoked (migration `0002`, applied on Supabase, tested)
-- [x] Design spec written, awaiting review: [docs/superpowers/specs/2026-10-29-phase5-auth-design.md](docs/superpowers/specs/2026-10-29-phase5-auth-design.md) (these two lines are not among the 7 counted tasks below)
-- [ ] Google OAuth in Supabase and Google Cloud
-- [ ] Redirect URLs (local and deployed)
-- [ ] Streamlit sign-in/sign-out
-- [ ] Token verification in FastAPI
-- [ ] Owner-only access for private data
-- [ ] Document RLS/backend authorization boundary (RLS migration `0002` applied early on 2026-10-29 and documented in doc 06; the full boundary doc and tests of the auth side are still to do)
-- [ ] Missing/expired/invalid/wrong-user tests
+## Phase 5 — Authentication & authorization ✅  ([history](docs/history/phase-5-auth/history.md))
+- [x] Early hardening (not counted): RLS enabled on all tables and `anon`/`authenticated` grants revoked (migration `0002`, applied on Supabase, tested)
+- [x] Design spec written and spike results recorded: [docs/superpowers/specs/2026-10-29-phase5-auth-design.md](docs/superpowers/specs/2026-10-29-phase5-auth-design.md) and plan [docs/superpowers/plans/2026-10-29-phase5-auth.md](docs/superpowers/plans/2026-10-29-phase5-auth.md) (not counted)
+- [x] Google OAuth in Supabase and Google Cloud (Web client, Testing-mode consent screen, Email provider and anonymous sign-ins off)
+- [x] Redirect URLs (local; `http://localhost:8501/**`; the deployed URL is added in Phase 7)
+- [x] Streamlit sign-in/sign-out (PKCE; real sign-in, sign-out and reload checked by hand)
+- [x] Token verification in FastAPI (`core/security.py`, forged-token matrix)
+- [x] Owner-only access for private data (`/me`, `/me/reports`, `db/reports.py`)
+- [x] Document RLS/backend authorization boundary (doc 06 section 6.4a)
+- [x] Missing/expired/invalid/wrong-user tests (`test_security.py`, `test_authorization.py`, `test_me_api.py`, `test_reports.py`)
+- [x] `POST /events` protected by a service key (`test_events_api.py`)
 
 ## Phase 6 — Dashboard ⬜  ([history](docs/history/phase-6-dashboard/history.md))
 - [ ] Overview page
