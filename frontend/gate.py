@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import httpx
 import streamlit as st
 
-from api_client import ApiClient, NotAllowed, NotSignedIn, ServiceUnavailable
+from api_client import ApiClient, ApiError, NotAllowed, NotSignedIn, ServiceUnavailable
 from auth import (
     AuthError,
     VerifierStore,
@@ -159,7 +159,7 @@ def require_session() -> tuple[ApiClient, dict]:
         st.rerun()
     except NotAllowed:
         _blocked(config, NOT_ALLOWED)
-    except ServiceUnavailable:
+    except (ServiceUnavailable, ApiError):  # any other 4xx (wrong base URL, proxy) reads the same
         _blocked(config, UNAVAILABLE)
     return api, me
 

@@ -107,3 +107,15 @@ def test_blocked_account_can_sign_out(monkeypatch):
     run(at)
     assert "tokens" not in at.session_state
     assert len(at.get("link_button")) == 1
+
+
+def test_me_other_4xx_shows_the_unavailable_message_not_a_traceback(monkeypatch):
+    routes = {"/me": (404, {"detail": "no such route"})}
+    at, requested = signed_in_app(monkeypatch, routes)
+    run(at)  # fails on any uncaught exception
+    shown = texts(at)
+    assert UNAVAILABLE in shown
+    assert [b.label for b in at.get("button")] == ["Sign out"]
+    assert "Active users" not in shown and "Window:" not in shown
+    assert "404" not in shown and "no such route" not in shown
+    assert requested == ["/me"]
