@@ -1,6 +1,12 @@
 import plotly.graph_objects as go
 
-from charts import LOW_N_MIN_ELIGIBLE, dau_line, funnel_bar
+from charts import (
+    LOW_N_MIN_ELIGIBLE,
+    dau_line,
+    funnel_bar,
+    retention_heatmap,
+    retention_matrix,
+)
 
 
 def test_dau_line_none_for_empty_and_figure_for_data():
@@ -38,3 +44,37 @@ def test_funnel_bar_one_bar_per_step_with_na_for_missing_conversion():
     assert list(fig.data[0].x) == [200, 50, 0]
     assert list(fig.data[0].y) == ["a", "b", "c"]
     assert not any("nan" in str(t).lower() or "none" in str(t).lower() for t in fig.data[0].text)
+
+
+def _cell(eligible, complete=True, retention=0.5):
+    return {
+        "cohort": "2026-10-05",
+        "period": 1,
+        "cohort_size": 40,
+        "eligible": eligible,
+        "retained": 1,
+        "retention": retention,
+        "complete": complete,
+    }
+
+
+def test_retention_matrix_flags_low_n_below_twenty_and_keeps_complete():
+    matrix = retention_matrix([_cell(19, complete=False), _cell(20)])
+    assert list(matrix["low_n"]) == [True, False]
+    assert list(matrix["complete"]) == [False, True]
+
+
+def test_retention_matrix_labels():
+    matrix = retention_matrix([_cell(19, complete=False), _cell(20), _cell(0, retention=None)])
+    assert matrix["label"][0] == "50.0% n=19, incomplete, low n"
+    assert matrix["label"][1] == "50.0% n=20"
+    assert matrix["label"][2] == "not enough data n=0, low n"
+
+
+def test_retention_heatmap_none_for_empty_and_greys_incomplete_cells():
+    assert retention_heatmap(retention_matrix([])) is None
+    figure = retention_heatmap(retention_matrix([_cell(20), _cell(20, complete=False)]))
+    assert isinstance(figure, go.Figure)
+    coloured, grey = figure.data
+    assert [v for row in coloured.z for v in row if v is not None] == [0.5]
+    assert [v for row in grey.z for v in row if v is not None] == [0]

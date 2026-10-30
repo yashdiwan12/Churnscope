@@ -120,3 +120,30 @@ def texts(at: AppTest) -> str:
         parts += [metric.label, str(metric.value)]
     parts += [button.label for button in at.get("button")]
     return "\n".join(parts)
+
+
+def _cell(cohort, period, eligible, retained, complete=True, size=40):
+    rate = None if eligible == 0 else retained / eligible
+    return {
+        "cohort": cohort,
+        "period": period,
+        "cohort_size": size,
+        "eligible": eligible,
+        "retained": retained,
+        "retention": rate,
+        "complete": complete,
+    }
+
+
+RETENTION_OK = {
+    "as_of": "2026-10-30T12:00:00+00:00",
+    "period_days": 7,
+    "periods": 8,
+    "cells": [
+        _cell("2026-10-05", 0, 40, 40),
+        _cell("2026-10-05", 1, 40, 20),
+        _cell("2026-10-12", 0, 19, 19, size=19),
+        _cell("2026-10-12", 1, 19, 5, complete=False, size=19),
+        _cell("2026-10-19", 1, 0, 0, complete=False, size=30),
+    ],
+}
