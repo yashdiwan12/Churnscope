@@ -41,6 +41,9 @@ class HistogramBin(BaseModel):
     count: int
 
 
+AtRiskSort = Literal["risk_desc", "risk_asc", "customer_asc"]
+
+
 class AtRiskRow(BaseModel):
     rank: int  # 1-based, distinct even for tied scores
     customer_id: str
@@ -71,6 +74,7 @@ class AtRiskOut(BaseModel):
     eligible_customers: int
     at_risk_count: int
     score_histogram: list[HistogramBin]  # 10 equal bins over [0, 1], the last one inclusive
+    sort: AtRiskSort  # the applied row order; rank is always the global rank by risk
     rows: list[AtRiskRow]
     evaluation: Evaluation
     caveat: str

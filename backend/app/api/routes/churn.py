@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.authorization import current_user
 from app.db.session import get_session
 from app.ml.artifact import ModelBundle
-from app.schemas.churn import AtRiskOut, PredictRequest, PredictResponse
+from app.schemas.churn import AtRiskOut, AtRiskSort, PredictRequest, PredictResponse
 from app.services import prediction
 
 router = APIRouter(prefix="/churn", tags=["churn"], dependencies=[Depends(current_user)])
@@ -39,5 +39,6 @@ def at_risk(
     session: SessionDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+    sort: AtRiskSort = "risk_desc",
 ) -> AtRiskOut:
-    return prediction.at_risk(session, bundle, limit, offset)
+    return prediction.at_risk(session, bundle, limit, offset, sort)

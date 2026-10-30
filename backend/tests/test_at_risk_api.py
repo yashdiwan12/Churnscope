@@ -231,3 +231,60 @@ def test_model_unavailable_is_503_even_when_db_broken():
 )
 def test_bounds_are_422(client, params):
     assert client.get(URL, params=params).status_code == 422
+
+
+# Risk order (rank): B1 (0.8929), C2 (0.5), D3 (0.5), E4 (0.25), A5 (0.0357).
+@pytest.mark.parametrize(
+    ("sort", "ids", "ranks"),
+    [
+        ("risk_desc", ["B", "C", "D", "E", "A"], [1, 2, 3, 4, 5]),
+        ("risk_asc", ["A", "E", "C", "D", "B"], [5, 4, 2, 3, 1]),
+        ("customer_asc", ["A", "B", "C", "D", "E"], [5, 1, 2, 3, 4]),
+    ],
+)
+def test_sort_orders_rows_but_ranks_stay_by_risk(client, sort, ids, ranks):
+    body = client.get(URL, params={"sort": sort}).json()
+    assert body["sort"] == sort
+    assert [x["customer_id"] for x in body["rows"]] == ids
+    assert [x["rank"] for x in body["rows"]] == ranks
+
+
+def test_paging_applies_to_the_sorted_order(client):
+    page = client.get(URL, params={"sort": "risk_asc", "limit": 2, "offset": 2}).json()
+    assert [x["customer_id"] for x in page["rows"]] == ["C", "D"]
+    assert [x["rank"] for x in page["rows"]] == [2, 3]
+    assert [x["risk_score"] for x in page["rows"]] == [0.5, 0.5]
+
+
+def test_default_sort_is_risk_desc(client):
+    default = client.get(URL).json()
+    explicit = client.get(URL, params={"sort": "risk_desc"}).json()
+    assert default["sort"] == "risk_desc"
+    assert default == explicit
+
+
+@pytest.mark.parametrize("sort", ["foo", "", "RISK_DESC", "risk_desc,risk_asc"])
+def test_invalid_sort_is_422(client, sort):
+    assert client.get(URL, params={"sort": sort}).status_code == 422
+
+
+def test_sorts_share_one_scoring_run(session, monkeypatch):
+    ingest(session, ROWS)
+    calls = []
+    real = features.build_features
+
+    def spy(*args, **kwargs):
+        calls.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(features, "build_features", spy)
+    client = make_client(session, stub_bundle())
+    for sort in ("risk_desc", "risk_asc", "customer_asc"):
+        assert client.get(URL, params={"sort": sort}).status_code == 200
+    assert len(calls) == 1
+
+
+def test_empty_database_echoes_sort(session):
+    body = make_client(session, stub_bundle()).get(URL, params={"sort": "customer_asc"}).json()
+    assert body["sort"] == "customer_asc"
+    assert body["rows"] == []

@@ -10,6 +10,7 @@ from app.ml.artifact import ModelBundle
 from app.schemas.churn import (
     AtRiskOut,
     AtRiskRow,
+    AtRiskSort,
     CustomerPrediction,
     Evaluation,
     HistogramBin,
@@ -167,7 +168,26 @@ def _evaluation(bundle: ModelBundle) -> Evaluation:
     )
 
 
-def at_risk(session: Session, bundle: ModelBundle, limit: int, offset: int) -> AtRiskOut:
+def _sorted_positions(scored: pd.DataFrame, sort: AtRiskSort) -> list[int]:
+    """Row positions of the rank-ordered ``scored`` frame (position + 1 == rank) in ``sort`` order."""
+    n = len(scored)
+    if sort == "risk_desc":
+        return list(range(n))
+    if sort == "customer_asc":
+        ids = scored["customer_id"].tolist()
+        return sorted(range(n), key=ids.__getitem__)
+    # risk_asc: score ascending, ties by customer id ascending (rank order breaks ties descending).
+    ids, risk = scored["customer_id"], scored["risk_score"]
+    return sorted(range(n), key=lambda i: (risk.iloc[i], ids.iloc[i]))
+
+
+def at_risk(
+    session: Session,
+    bundle: ModelBundle,
+    limit: int,
+    offset: int,
+    sort: AtRiskSort = "risk_desc",
+) -> AtRiskOut:
     cutoff = default_cutoff(session)
     scored = _scored(session, bundle, cutoff) if cutoff is not None else None
     scores = [] if scored is None else scored["risk_score"].tolist()
@@ -183,15 +203,20 @@ def at_risk(session: Session, bundle: ModelBundle, limit: int, offset: int) -> A
 
     rows = []
     if scored is not None:
-        page = scored.iloc[offset : offset + limit]
+        # ``scored`` is in rank order, so a row's rank is its position + 1 whatever the sort.
+        positions = _sorted_positions(scored, sort)[offset : offset + limit]
         rows = [
             AtRiskRow(
-                rank=offset + i + 1,
-                customer_id=r.customer_id,
-                risk_score=r.risk_score,
-                predicted_class="at_risk" if r.risk_score >= bundle.threshold else "not_at_risk",
+                rank=pos + 1,
+                customer_id=scored["customer_id"].iloc[pos],
+                risk_score=scored["risk_score"].iloc[pos],
+                predicted_class=(
+                    "at_risk"
+                    if scored["risk_score"].iloc[pos] >= bundle.threshold
+                    else "not_at_risk"
+                ),
             )
-            for i, r in enumerate(page.itertuples())
+            for pos in positions
         ]
 
     return AtRiskOut(
@@ -204,6 +229,7 @@ def at_risk(session: Session, bundle: ModelBundle, limit: int, offset: int) -> A
         eligible_customers=len(scores),
         at_risk_count=sum(1 for s in scores if s >= bundle.threshold),
         score_histogram=histogram,
+        sort=sort,
         rows=rows,
         evaluation=_evaluation(bundle),
         caveat=CAVEAT,

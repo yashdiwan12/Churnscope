@@ -61,7 +61,7 @@ flowchart TD
 | GET | `/analytics/engagement` | required | Activity trends  `[Built]` |
 | GET | `/customers/{customer_id}/insights` | required | Per-customer insights  `[Planned]` |
 | POST | `/churn/predict` | required | Churn-risk estimate for given customer ids  `[Built]` |
-| GET | `/churn/at-risk` | required | Ranked, paged churn-risk list for all eligible customers, score histogram, model evaluation  `[Built]` (Phase 6) |
+| GET | `/churn/at-risk` | required | Ranked, paged churn-risk list for all eligible customers (`sort`: `risk_desc` default, `risk_asc`, `customer_asc`; `rank` always by risk), score histogram, model evaluation  `[Built]` (Phase 6) |
 | GET | `/me` | required | Signed-in user (id, email, created_at)  `[Built]` |
 | GET/POST | `/me/reports` | required | List / save own reports (max 100)  `[Built]` |
 | DELETE | `/me/reports/{id}` | required | Delete own report; 404 for missing or someone else's  `[Built]` |
