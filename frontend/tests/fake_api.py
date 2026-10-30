@@ -179,6 +179,7 @@ AT_RISK_OK = {
     "window_days": 28,
     "horizon_days": 30,
     "decision_threshold": 0.5,
+    "sort": "risk_desc",
     "eligible_customers": 120,
     "at_risk_count": 18,
     "score_histogram": [_bin(i, c) for i, c in enumerate([30, 25, 20, 15, 12, 8, 5, 3, 1, 1])],

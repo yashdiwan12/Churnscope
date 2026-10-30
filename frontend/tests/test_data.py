@@ -47,8 +47,15 @@ def test_data_sends_analytics_timeout_and_omits_none_params():
         ),
         ("/analytics/retention", t, {"periods": 8}),
         ("/analytics/engagement", t, {"end": "2026-10-31T00:00:00Z"}),
-        ("/churn/at-risk", t, {"limit": 50, "offset": 0}),
+        ("/churn/at-risk", t, {"limit": 50, "offset": 0, "sort": "risk_desc"}),
     ]
+
+
+def test_at_risk_sort_is_part_of_the_cache_key():
+    api = FakeApi({"a": 1}, {"b": 2})
+    assert data.at_risk(api, 50, 0, "risk_desc") == {"a": 1}
+    assert data.at_risk(api, 50, 0, "risk_asc") == {"b": 2}
+    assert api.calls[-1][2]["sort"] == "risk_asc"
 
 
 def test_different_params_are_cached_separately():

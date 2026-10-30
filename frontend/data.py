@@ -40,5 +40,5 @@ def engagement(_api: ApiClient, start: str | None, end: str | None) -> dict:
 
 
 @st.cache_data(ttl=TTL_SECONDS, show_spinner=False)
-def at_risk(_api: ApiClient, limit: int, offset: int) -> dict:
-    return _get(_api, "/churn/at-risk", limit=limit, offset=offset)
+def at_risk(_api: ApiClient, limit: int, offset: int, sort: str = "risk_desc") -> dict:
+    return _get(_api, "/churn/at-risk", limit=limit, offset=offset, sort=sort)

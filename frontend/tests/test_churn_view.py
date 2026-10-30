@@ -126,8 +126,25 @@ def test_churn_table_columns_and_rows(monkeypatch):
     assert frame["customer"].tolist() == ["cust-001", "cust-002", "cust-003"]
     assert frame["rank"].tolist() == [1, 2, 3]
     assert frame["predicted class"].tolist() == ["At risk", "At risk", "Not at risk"]
-    assert frame["risk score (relative)"].tolist() == ["0.93", "0.88", "0.41"]
-    assert calls(requested)[-1] == {"limit": 50, "offset": 0}
+    assert frame["risk score (relative)"].tolist() == [0.93, 0.88, 0.41]
+    assert calls(requested)[-1] == {"limit": 50, "offset": 0, "sort": "risk_desc"}
+
+
+def test_churn_table_rank_is_integer_and_score_is_float(monkeypatch):
+    at, _ = churn_app(monkeypatch)
+    run(at)
+    frame = at.dataframe[0].value
+    assert frame["rank"].dtype.kind == "i"
+    assert frame["risk score (relative)"].dtype.kind == "f"
+
+
+def test_churn_table_caption_explains_the_sort_scope(monkeypatch):
+    at, _ = churn_app(monkeypatch)
+    shown = texts(run(at))
+    assert (
+        "The sort above applies to the whole list. "
+        "Clicking a column header only reorders the rows on this page."
+    ) in shown
 
 
 def test_churn_unknown_predicted_class_is_shown_as_is(monkeypatch):
@@ -149,7 +166,54 @@ def test_churn_page_two_requests_offset_50(monkeypatch):
     run(at)
     at.number_input[0].set_value(2)
     run(at)
-    assert calls(requested)[-1] == {"limit": 50, "offset": 50}
+    assert calls(requested)[-1] == {"limit": 50, "offset": 50, "sort": "risk_desc"}
+
+
+SORT_LABELS = ["Highest risk first", "Lowest risk first", "Customer ID (A-Z)"]
+
+
+def test_churn_sort_selectbox_options_in_order_after_success(monkeypatch):
+    at, _ = churn_app(monkeypatch)
+    run(at)
+    assert len(at.selectbox) == 1
+    box = at.selectbox[0]
+    assert box.label == "Sort by"
+    assert box.key == "churn_sort"
+    assert list(box.options) == SORT_LABELS
+    assert box.value == "risk_desc"
+
+
+def test_churn_sort_choice_reaches_the_request(monkeypatch):
+    at, requested = churn_app(monkeypatch)
+    run(at)
+    at.selectbox[0].select("risk_asc")
+    run(at)
+    assert calls(requested)[-1] == {"limit": 50, "offset": 0, "sort": "risk_asc"}
+    at.selectbox[0].select("customer_asc")
+    run(at)
+    assert calls(requested)[-1] == {"limit": 50, "offset": 0, "sort": "customer_asc"}
+
+
+def test_churn_changing_sort_on_page_two_resets_to_page_one(monkeypatch):
+    at, requested = churn_app(monkeypatch)
+    run(at)
+    at.number_input[0].set_value(2)
+    run(at)
+    assert calls(requested)[-1] == {"limit": 50, "offset": 50, "sort": "risk_desc"}
+    at.selectbox[0].select("risk_asc")
+    run(at)
+    assert calls(requested)[-1] == {"limit": 50, "offset": 0, "sort": "risk_asc"}
+    assert at.number_input[0].value == 1
+
+
+def test_churn_paging_keeps_the_chosen_sort(monkeypatch):
+    at, requested = churn_app(monkeypatch)
+    run(at)
+    at.selectbox[0].select("customer_asc")
+    run(at)
+    at.number_input[0].set_value(2)
+    run(at)
+    assert calls(requested)[-1] == {"limit": 50, "offset": 50, "sort": "customer_asc"}
 
 
 def test_churn_page_beyond_end_does_not_crash(monkeypatch):
@@ -167,6 +231,7 @@ def test_churn_empty_when_no_eligible_customers(monkeypatch):
     assert len(at.get("plotly_chart")) == 0
     assert len(at.dataframe) == 0
     assert len(at.number_input) == 0
+    assert len(at.selectbox) == 0
 
 
 def test_churn_empty_when_cutoff_is_none(monkeypatch):
@@ -177,6 +242,7 @@ def test_churn_empty_when_cutoff_is_none(monkeypatch):
     assert len(at.get("plotly_chart")) == 0
     assert len(at.dataframe) == 0
     assert len(at.number_input) == 0
+    assert len(at.selectbox) == 0
 
 
 def test_churn_503_shows_retry_without_server_text(monkeypatch):
@@ -187,3 +253,4 @@ def test_churn_503_shows_retry_without_server_text(monkeypatch):
     assert "Retry" in [b.label for b in at.get("button")]
     assert len(at.dataframe) == 0
     assert len(at.number_input) == 0
+    assert len(at.selectbox) == 0

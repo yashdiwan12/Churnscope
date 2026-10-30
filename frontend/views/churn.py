@@ -39,17 +39,30 @@ def _evaluation(evaluation: dict) -> None:
     st.caption(f"Test data synthetic: {kind}")
 
 
+_SORT_LABELS = {
+    "risk_desc": "Highest risk first",
+    "risk_asc": "Lowest risk first",
+    "customer_asc": "Customer ID (A-Z)",
+}
 _CLASS_LABELS = {"at_risk": "At risk", "not_at_risk": "Not at risk"}
 
 
 def render(api: ApiClient) -> None:
     st.header("Churn Risk")
-    # The page input appears only after a successful fetch, so its value is read before it.
+    # The page and sort inputs appear only after a successful fetch, so their values are read
+    # before them. A new sort restarts at page 1; the page widget is not created yet in this run,
+    # so its key may be assigned here.
+    sort = st.session_state.get("churn_sort", "risk_desc")
+    if sort not in _SORT_LABELS:
+        sort = "risk_desc"
+    if sort != st.session_state.get("churn_sort_seen", "risk_desc"):
+        st.session_state["churn_page"] = 1
+    st.session_state["churn_sort_seen"] = sort
     page = max(1, int(st.session_state.get("churn_page", 1)))
     offset = (page - 1) * PAGE_SIZE
     try:
         with st.spinner("Loading churn risk..."):
-            result = data.at_risk(api, PAGE_SIZE, offset)
+            result = data.at_risk(api, PAGE_SIZE, offset, sort)
     except (ApiError, NotAllowed, NotSignedIn, ServiceUnavailable) as exc:
         render_error(exc, retry_key="churn_retry")
         return
@@ -82,21 +95,38 @@ def render(api: ApiClient) -> None:
     if figure is not None:
         st.plotly_chart(figure, width="stretch")
 
-    st.number_input("Page", min_value=1, value=1, step=1, key="churn_page")
+    page_column, sort_column = st.columns(2)
+    with page_column:
+        st.number_input("Page", min_value=1, value=1, step=1, key="churn_page")
+    with sort_column:
+        st.selectbox(
+            "Sort by",
+            list(_SORT_LABELS),
+            format_func=_SORT_LABELS.__getitem__,
+            key="churn_sort",
+        )
     rows = result["rows"]
     if rows:
         st.dataframe(
             {
                 "rank": [row["rank"] for row in rows],
                 "customer": [row["customer_id"] for row in rows],
-                "risk score (relative)": [f"{row['risk_score']:.2f}" for row in rows],
+                "risk score (relative)": [float(row["risk_score"]) for row in rows],
                 "predicted class": [
                     _CLASS_LABELS.get(row["predicted_class"], row["predicted_class"])
                     for row in rows
                 ],
             },
+            column_config={
+                "rank": st.column_config.NumberColumn(format="%d"),
+                "risk score (relative)": st.column_config.NumberColumn(format="%.2f"),
+            },
             hide_index=True,
             width="stretch",
+        )
+        st.caption(
+            "The sort above applies to the whole list. "
+            "Clicking a column header only reorders the rows on this page."
         )
     else:
         render_empty("No customers on this page")
