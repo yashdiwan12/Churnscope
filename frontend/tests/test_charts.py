@@ -73,8 +73,17 @@ def test_retention_matrix_labels():
 
 def test_retention_heatmap_none_for_empty_and_greys_incomplete_cells():
     assert retention_heatmap(retention_matrix([])) is None
-    figure = retention_heatmap(retention_matrix([_cell(20), _cell(20, complete=False)]))
+    done = {**_cell(20, retention=0.5), "period": 1}
+    partial = {**_cell(20, complete=False, retention=0.9), "period": 2}
+    figure = retention_heatmap(retention_matrix([done, partial]))
     assert isinstance(figure, go.Figure)
     coloured, grey = figure.data
-    assert [v for row in coloured.z for v in row if v is not None] == [0.5]
-    assert [v for row in grey.z for v in row if v is not None] == [0]
+    assert list(coloured.z[0]) == [0.5, None]
+    assert list(grey.z[0]) == [None, 0]
+
+
+def test_retention_heatmap_hover_shows_label_not_raw_z():
+    figure = retention_heatmap(retention_matrix([_cell(20), _cell(20, complete=False)]))
+    for trace in figure.data:
+        assert "%{text}" in trace.hovertemplate
+        assert "%{z}" not in trace.hovertemplate

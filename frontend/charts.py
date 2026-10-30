@@ -103,7 +103,12 @@ def retention_heatmap(matrix: pd.DataFrame) -> go.Figure | None:
             incomplete[y][x] = 0
         elif not pd.isna(row.retention):
             rates[y][x] = float(row.retention)
-    common = {"x": [f"Week {p}" for p in periods], "y": cohorts, "text": text}
+    common = {
+        "x": [f"Week {p}" for p in periods],
+        "y": cohorts,
+        "text": text,
+        "hovertemplate": "%{y}, %{x}<br>%{text}<extra></extra>",
+    }
     fig = go.Figure(
         [
             go.Heatmap(
