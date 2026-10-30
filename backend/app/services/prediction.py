@@ -38,6 +38,20 @@ def default_cutoff(session: Session) -> pd.Timestamp | None:
     return None if through is None else through.floor("D")
 
 
+def _score_frame(bundle: ModelBundle, events: pd.DataFrame, cutoff: pd.Timestamp) -> pd.Series:
+    """Raw model scores at ``cutoff``, indexed by customer primary key; empty if none eligible.
+
+    The one place features are built and the model is called, shared by ``predict`` and
+    ``score_all`` so single-customer and ranked-list scores cannot drift apart.
+    """
+    x = features.build_features(events, [cutoff])
+    if x.empty:
+        return pd.Series(dtype=float)
+    x = x[bundle.metadata["feature_columns"]]  # exact training column order
+    proba = bundle.pipeline.predict_proba(x)[:, 1]
+    return pd.Series(proba, index=x.index.get_level_values("customer_id"))
+
+
 def predict(
     session: Session,
     bundle: ModelBundle,
@@ -51,11 +65,7 @@ def predict(
     scores: dict[int, float] = {}
     if known and cutoff is not None:  # cutoff is None only when no events exist at all
         events = repositories.load_events(session, until=cutoff, customer_ids=list(known.values()))
-        x = features.build_features(events, [cutoff])
-        if not x.empty:
-            x = x[bundle.metadata["feature_columns"]]  # exact training column order
-            proba = bundle.pipeline.predict_proba(x)[:, 1]
-            scores = dict(zip(x.index.get_level_values("customer_id"), proba, strict=True))
+        scores = _score_frame(bundle, events, cutoff).to_dict()
 
     results = []
     for ext in unique_ids:
@@ -118,15 +128,13 @@ def score_all(session: Session, bundle: ModelBundle, cutoff: pd.Timestamp) -> pd
     empty = pd.DataFrame(
         {"customer_id": pd.Series(dtype=str), "risk_score": pd.Series(dtype=float)}
     )
-    x = features.build_features(repositories.load_events(session, until=cutoff), [cutoff])
-    if x.empty:
+    raw = _score_frame(bundle, repositories.load_events(session, until=cutoff), cutoff)
+    if raw.empty:
         return empty
-    x = x[bundle.metadata["feature_columns"]]  # exact training column order
-    proba = bundle.pipeline.predict_proba(x)[:, 1]
-    pks = [int(p) for p in x.index.get_level_values("customer_id")]
+    pks = [int(p) for p in raw.index]
     names = repositories.customer_external_ids(session, pks)
     frame = pd.DataFrame(
-        {"customer_id": [names[p] for p in pks], "risk_score": [round(float(p), 4) for p in proba]}
+        {"customer_id": [names[p] for p in pks], "risk_score": [round(float(v), 4) for v in raw]}
     )
     return frame.sort_values(["risk_score", "customer_id"], ascending=[False, True]).reset_index(
         drop=True
