@@ -3,13 +3,14 @@ from functools import partial
 import streamlit as st
 
 import gate
-from views import overview
+from views import funnel, overview
 
 BANNER = "Demo data: synthetic events from a seeded generator, not real customers."
 
 # (view module, title, url_path). Adding a page is one line here.
 PAGES = [
     (overview, "Overview", "overview"),
+    (funnel, "Funnel", "funnel"),
 ]
 
 st.set_page_config(page_title="Churnscope", layout="wide")

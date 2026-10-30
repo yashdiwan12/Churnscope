@@ -24,3 +24,32 @@ def dau_line(daily_active_users: list[dict]) -> go.Figure | None:
         margin={"t": 40, "b": 40},
     )
     return fig
+
+
+def _percent(fraction: float | None) -> str:
+    return "n/a" if fraction is None else f"{fraction * 100:.1f}%"
+
+
+def funnel_bar(steps: list[dict]) -> go.Figure | None:
+    if not steps or steps[0]["users"] == 0:
+        return None
+    labels = [
+        f"{row['users']:,} ({_percent(row['conversion_from_start'])} of start)" for row in steps
+    ]
+    fig = go.Figure(
+        go.Bar(
+            x=[row["users"] for row in steps],
+            y=[row["step"] for row in steps],
+            orientation="h",
+            text=labels,
+            textposition="auto",
+            name="Users",
+        )
+    )
+    fig.update_layout(
+        title="Users reaching each step",
+        xaxis_title="Users",
+        yaxis={"autorange": "reversed"},
+        margin={"t": 40, "b": 40},
+    )
+    return fig

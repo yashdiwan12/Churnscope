@@ -41,6 +41,33 @@ OVERVIEW_OK = {
     "qualifying_event_names": ["login", "report_viewed"],
 }
 
+FUNNEL_OK = {
+    "window": OVERVIEW_OK["window"],
+    "window_days": 14,
+    "eligible_users": 200,
+    "steps": [
+        {
+            "step": "signup",
+            "users": 200,
+            "conversion_from_previous": None,
+            "conversion_from_start": 1.0,
+        },
+        {
+            "step": "first_report",
+            "users": 50,
+            "conversion_from_previous": 0.25,
+            "conversion_from_start": 0.25,
+        },
+        {
+            "step": "export",
+            "users": 5,
+            "conversion_from_previous": 0.1,
+            "conversion_from_start": 0.025,
+        },
+    ],
+    "note": "Users signed up in the last 14 days are excluded.",
+}
+
 
 def install(monkeypatch, routes: dict[str, tuple[int, dict | None]]) -> list[str]:
     requested: list[str] = []
