@@ -183,9 +183,9 @@ AT_RISK_OK = {
     "at_risk_count": 18,
     "score_histogram": [_bin(i, c) for i, c in enumerate([30, 25, 20, 15, 12, 8, 5, 3, 1, 1])],
     "rows": [
-        _risk_row(1, "cust-001", 0.93, "churn"),
-        _risk_row(2, "cust-002", 0.88, "churn"),
-        _risk_row(3, "cust-003", 0.41, "no_churn"),
+        _risk_row(1, "cust-001", 0.93, "at_risk"),
+        _risk_row(2, "cust-002", 0.88, "at_risk"),
+        _risk_row(3, "cust-003", 0.41, "not_at_risk"),
     ],
     "evaluation": {
         "roc_auc": 0.879,

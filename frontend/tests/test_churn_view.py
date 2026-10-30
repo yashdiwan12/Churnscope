@@ -67,7 +67,7 @@ def test_churn_renders_time_basis_counts_caveat_and_evaluation(monkeypatch):
     assert "Recall: 0.800" in shown
     assert "Test churn rate: 35.0%" in shown
     assert "Test set size n: 400" in shown
-    assert "synthetic" in shown
+    assert "Test data synthetic: yes" in shown
     assert "does not clearly beat" in shown
     assert len(at.get("plotly_chart")) == 1
 
@@ -88,6 +88,7 @@ def test_churn_evaluation_none_fields_show_na(monkeypatch):
     assert "ROC-AUC: n/a" in shown
     assert "Test churn rate: n/a" in shown
     assert "Test set size n: n/a" in shown
+    assert "Test data synthetic: n/a" in shown
     assert "none" not in shown.lower()
 
 
