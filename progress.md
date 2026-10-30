@@ -2,7 +2,7 @@
 
 Live tracker of implementation progress per phase. Detailed notes, decisions, and evidence live in each phase's `docs/history/<phase>/history.md`; the phase summary table is in [docs/10-project-history.md](docs/10-project-history.md).
 
-**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-10-30 · Phase 6 in progress on branch `phase-6-dashboard` (not merged): backend 270 and frontend 97 tests pass locally at the last check
+**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-10-30 · Phase 6 done on branch `phase-6-dashboard` (merge pending): backend 281 and frontend 115 tests pass locally
 
 ## Summary
 
@@ -14,7 +14,7 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 | 3 | Analytics | ✅ Done | 6 / 6 |
 | 4 | Churn model | ✅ Done | 8 / 8 |
 | 5 | Authentication & authorization | ✅ Done | 8 / 8 |
-| 6 | Dashboard | 🟡 In progress | 4 / 7 |
+| 6 | Dashboard | ✅ Done (merge pending) | 7 / 7 |
 | 6b | Bring your own data (uploads) | ⬜ Not started (design pending) | — |
 | 7 | Quality & documentation | ⬜ Not started | 0 / 10 |
 
@@ -80,16 +80,16 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 - [x] Missing/expired/invalid/wrong-user tests (`test_security.py`, `test_authorization.py`, `test_me_api.py`, `test_reports.py`)
 - [x] `POST /events` protected by a service key (`test_events_api.py`)
 
-## Phase 6 — Dashboard 🟡  ([history](docs/history/phase-6-dashboard/history.md))
-Spec: [docs/superpowers/specs/2026-10-30-phase6-dashboard-design.md](docs/superpowers/specs/2026-10-30-phase6-dashboard-design.md) · plan: [docs/superpowers/plans/2026-10-30-phase6-dashboard.md](docs/superpowers/plans/2026-10-30-phase6-dashboard.md) · executed subagent-driven on branch `phase-6-dashboard`; every task gets an independent review. Counted items below exclude the deferred saved views (7 total). A page is ticked when built, tested and independently reviewed; the real-API run-through with the user is Task 9.
+## Phase 6 — Dashboard ✅  ([history](docs/history/phase-6-dashboard/history.md))
+Spec: [docs/superpowers/specs/2026-10-30-phase6-dashboard-design.md](docs/superpowers/specs/2026-10-30-phase6-dashboard-design.md) · plan: [docs/superpowers/plans/2026-10-30-phase6-dashboard.md](docs/superpowers/plans/2026-10-30-phase6-dashboard.md) · executed subagent-driven on branch `phase-6-dashboard`; every task gets an independent review. Counted items below exclude the deferred saved views (7 total). A page is ticked when built, tested and independently reviewed; the user ran the real app against the real API on 2026-10-30 and approved it.
 - [x] Backend: `GET /churn/at-risk` ranked list, event-id-keyed cache, read-first `/me` profile (Tasks 1-2, not counted)
-- [x] Overview page (built, reviewed; real-API check pending in Task 9)
-- [x] Funnel page (built, reviewed; real-API check pending in Task 9)
-- [x] Retention page (built, reviewed; real-API check pending in Task 9)
-- [x] Engagement page (built, reviewed; real-API check pending in Task 9)
-- [ ] Churn-risk page (built, independent review in progress)
-- [ ] Connected to FastAPI (ticks after the Task 9 real-API run-through; the gate, data layer and four pages already call the API in tests with a fake)
-- [ ] Loading, empty, error states (ticks with the Churn-risk page; the shared states module and the four built pages already have them)
+- [x] Overview page
+- [x] Funnel page
+- [x] Retention page (sortable cell-details table)
+- [x] Engagement page
+- [x] Churn-risk page (ranked list with Sort by: highest risk, lowest risk, customer ID; numeric rank and score columns)
+- [x] Connected to FastAPI (gate calls `GET /me` on every rerun; five pages fetch through the cached data layer; verified live by the user)
+- [x] Loading, empty, error states (shared `states.py` with fixed messages and Retry, used by every page)
 - Saved views (optional, P1): **deferred**, not counted. `/me/reports` already exists; the UI can follow later.
 
 ## Phase 6b — Bring your own data (uploads) ⬜  (design pending)
