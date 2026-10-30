@@ -5,6 +5,7 @@ or a 401) or a fixed error with a sign-out button (403, 503) and stops the scrip
 renders; this is what keeps the shared result cache from outliving a user's access.
 """
 
+import html
 import os
 import time
 from dataclasses import dataclass
@@ -27,6 +28,10 @@ from auth import (
 from states import NOT_ALLOWED, UNAVAILABLE
 
 FLOW_REUSE_SECONDS = 300  # well inside the verifier TTL of 10 minutes
+SIGN_IN_STYLE = (
+    "display:inline-block;padding:0.5rem 1rem;border-radius:0.5rem;background:#2563eb;"
+    "color:#fff;text-decoration:none;font-weight:600"
+)
 
 
 @dataclass(frozen=True)
@@ -93,7 +98,13 @@ def sign_in_page(config: Config) -> None:
         redirect_to=f"{config.app_base_url}?flow={flow}",
         challenge=challenge_for(verifier),
     )
-    st.link_button("Sign in with Google", url)
+    # An anchor, not st.link_button: that always opens a new tab, but the OAuth redirect must
+    # come back to the tab that started the flow.
+    st.markdown(
+        f'<a href="{html.escape(url, quote=True)}" target="_self" rel="noopener" '
+        f'style="{SIGN_IN_STYLE}">Sign in with Google</a>',
+        unsafe_allow_html=True,
+    )
 
 
 def sign_out_button(config: Config) -> None:

@@ -1,5 +1,8 @@
 """The sign-in gate, smoke-tested with Streamlit's AppTest and a fake API (no browser, no network)."""
 
+import html
+import re
+
 import pytest
 from streamlit.testing.v1 import AppTest
 
@@ -7,6 +10,16 @@ from tests.fake_api import APP, ME_OK, OVERVIEW_OK, install, run, signed_in_app,
 
 NOT_ALLOWED = "This account is not allowed to use Churnscope."
 UNAVAILABLE = "The service is unavailable. Please try again shortly."
+
+
+def sign_in_anchors(at):
+    """The sign-in anchors on the page: (attributes, href with `&amp;` unescaped)."""
+    found = []
+    for md in at.markdown:
+        for attrs in re.findall(r"<a\s([^>]*)>\s*Sign in with Google", md.value):
+            href = re.search(r'href="([^"]*)"', attrs)
+            found.append((attrs, html.unescape(href.group(1)) if href else ""))
+    return found
 
 
 def signed_out(monkeypatch, **env):
@@ -21,20 +34,23 @@ def signed_out(monkeypatch, **env):
 def test_unconfigured_app_says_so_and_offers_no_sign_in(monkeypatch):
     at, _ = signed_out(monkeypatch)
     assert "not configured" in at.error[0].value
-    assert len(at.get("link_button")) == 0
+    assert sign_in_anchors(at) == []
 
 
 def test_signed_out_user_gets_a_google_link_with_pkce(monkeypatch):
     at, _ = signed_out(monkeypatch, SUPABASE_URL="https://p.supabase.co", SUPABASE_ANON_KEY="anon")
-    link = at.get("link_button")[0].proto.url
+    anchors = sign_in_anchors(at)
+    assert len(anchors) == 1
+    attrs, link = anchors[0]
+    assert 'target="_self"' in attrs  # same window: the OAuth redirect must return to this tab
     assert link.startswith("https://p.supabase.co/auth/v1/authorize?")
     assert "code_challenge=" in link and "flow%3D" in link
 
 
 def test_reruns_reuse_one_pending_sign_in(monkeypatch):
     at, _ = signed_out(monkeypatch, SUPABASE_URL="https://p.supabase.co", SUPABASE_ANON_KEY="anon")
-    first = at.get("link_button")[0].proto.url
-    second = run(at).get("link_button")[0].proto.url
+    first = sign_in_anchors(at)[0][1]
+    second = sign_in_anchors(run(at))[0][1]
     assert first == second
 
 
@@ -42,7 +58,7 @@ def test_no_session_shows_sign_in_and_no_page_content(monkeypatch):
     at, requested = signed_out(
         monkeypatch, SUPABASE_URL="https://p.supabase.co", SUPABASE_ANON_KEY="anon"
     )
-    assert len(at.get("link_button")) == 1
+    assert len(sign_in_anchors(at)) == 1
     assert "Active users" not in texts(at)
     assert requested == []
 
@@ -51,7 +67,7 @@ def test_401_from_me_returns_to_sign_in(monkeypatch):
     at, requested = signed_in_app(monkeypatch, {"/me": (401, {"detail": "expired"})})
     run(at)
     assert "tokens" not in at.session_state
-    assert len(at.get("link_button")) == 1
+    assert len(sign_in_anchors(at)) == 1
     assert "Active users" not in texts(at)
     assert requested == ["/me"]
 
@@ -95,7 +111,7 @@ def test_signed_in_sidebar_shows_the_email_and_sign_out_clears_the_session(monke
     at.button(key="sign_out").click()
     run(at)
     assert "tokens" not in at.session_state
-    assert len(at.get("link_button")) == 1
+    assert len(sign_in_anchors(at)) == 1
     assert "/auth/v1/logout" in requested
 
 
@@ -106,7 +122,7 @@ def test_blocked_account_can_sign_out(monkeypatch):
     at.button(key="sign_out").click()
     run(at)
     assert "tokens" not in at.session_state
-    assert len(at.get("link_button")) == 1
+    assert len(sign_in_anchors(at)) == 1
 
 
 def test_me_other_4xx_shows_the_unavailable_message_not_a_traceback(monkeypatch):
