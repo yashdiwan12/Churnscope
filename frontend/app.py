@@ -1,134 +1,34 @@
-import os
-import time
+from functools import partial
 
-import httpx
 import streamlit as st
 
-from api_client import ApiClient, NotAllowed, NotSignedIn, ServiceUnavailable
-from auth import (
-    AuthError,
-    VerifierStore,
-    authorize_url,
-    challenge_for,
-    exchange_code,
-    needs_refresh,
-    new_verifier,
-    refresh,
-    sign_out,
-)
+import gate
+from views import churn, engagement, funnel, overview, retention
 
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
-APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8501")
-FLOW_REUSE_SECONDS = 300  # well inside the verifier TTL of 10 minutes
+BANNER = "Demo data: synthetic events from a seeded generator, not real customers."
 
-
-@st.cache_resource
-def verifier_store() -> VerifierStore:
-    # Process-wide: the redirect back from Google arrives in a brand-new Streamlit session.
-    return VerifierStore()
-
-
-@st.cache_resource
-def http_client() -> httpx.Client:
-    return httpx.Client()
-
-
-def clear_session() -> None:
-    st.session_state.pop("tokens", None)
-
-
-def finish_sign_in(code: str, flow: str) -> None:
-    verifier = verifier_store().pop(flow)
-    st.query_params.clear()  # the code is single-use; never leave it in the URL
-    if verifier is None:
-        st.warning("That sign-in link expired. Please sign in again.")
-        return
-    try:
-        st.session_state["tokens"] = exchange_code(
-            http_client(),
-            supabase_url=SUPABASE_URL,
-            anon_key=SUPABASE_ANON_KEY,
-            code=code,
-            verifier=verifier,
-        )
-    except AuthError:
-        st.error("Sign-in failed. Please try again.")
-
-
-def sign_in_page() -> None:
-    st.write("Sign in to view analytics and churn risk.")
-    # One pending sign-in per browser session (not one per rerun), so reruns cannot flood the store.
-    pending = st.session_state.get("pending_flow")
-    if pending is None or time.monotonic() - pending[2] > FLOW_REUSE_SECONDS:
-        pending = (new_verifier()[:24], new_verifier(), time.monotonic())
-        st.session_state["pending_flow"] = pending
-        verifier_store().put(pending[0], pending[1])
-    flow, verifier, _ = pending
-    url = authorize_url(
-        supabase_url=SUPABASE_URL,
-        redirect_to=f"{APP_BASE_URL}?flow={flow}",
-        challenge=challenge_for(verifier),
-    )
-    st.link_button("Sign in with Google", url)
-
-
-def signed_in_page() -> None:
-    tokens = st.session_state["tokens"]
-    if needs_refresh(tokens, time.time()):
-        try:
-            tokens = refresh(
-                http_client(),
-                supabase_url=SUPABASE_URL,
-                anon_key=SUPABASE_ANON_KEY,
-                refresh_token=tokens.refresh_token,
-            )
-            st.session_state["tokens"] = tokens
-        except AuthError:
-            clear_session()
-            st.rerun()
-    api = ApiClient(API_BASE_URL, lambda: st.session_state["tokens"].access_token, http_client())
-    try:
-        me = api.get("/me")
-    except NotSignedIn:
-        clear_session()
-        st.rerun()
-    except NotAllowed:
-        st.error("This account is not allowed to use Churnscope.")
-        me = None
-    except ServiceUnavailable:
-        st.error("The service is unavailable. Please try again shortly.")
-        me = None
-    if me:
-        st.success(f"Signed in as {me['email']}")
-    if st.button("Sign out"):
-        sign_out(
-            http_client(),
-            supabase_url=SUPABASE_URL,
-            anon_key=SUPABASE_ANON_KEY,
-            access_token=tokens.access_token,
-        )
-        clear_session()
-        st.rerun()
-
+# (view module, title, url_path). Adding a page is one line here.
+PAGES = [
+    (overview, "Overview", "overview"),
+    (funnel, "Funnel", "funnel"),
+    (retention, "Retention", "retention"),
+    (engagement, "Engagement", "engagement"),
+    (churn, "Churn Risk", "churn-risk"),
+]
 
 st.set_page_config(page_title="Churnscope", layout="wide")
+st.markdown("<style>footer {visibility: hidden;}</style>", unsafe_allow_html=True)
 st.title("Churnscope")
 st.caption("Product analytics and churn intelligence")
+st.info(BANNER)
 
-if not (SUPABASE_URL and SUPABASE_ANON_KEY):
-    st.error("Sign-in is not configured (SUPABASE_URL and SUPABASE_ANON_KEY are required).")
-    st.stop()
-
-params = st.query_params
-if "error" in params:
-    st.query_params.clear()
-    st.error("Sign-in was cancelled or failed. Please try again.")
-elif "code" in params and "flow" in params and "tokens" not in st.session_state:
-    finish_sign_in(params["code"], params["flow"])
-
-if "tokens" in st.session_state:
-    signed_in_page()
-else:
-    sign_in_page()
+# Pages are built only after the gate returns, so none is reachable without a session.
+api, me = gate.require_session()
+gate.signed_in_sidebar(me)
+page = st.navigation(
+    [
+        st.Page(partial(view.render, api), title=title, url_path=url_path)
+        for view, title, url_path in PAGES
+    ]
+)
+page.run()

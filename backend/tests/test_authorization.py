@@ -22,6 +22,7 @@ PROTECTED = [
     ("get", "/analytics/retention", None),
     ("get", "/analytics/engagement", None),
     ("post", "/churn/predict", {"customer_ids": ["c1"]}),
+    ("get", "/churn/at-risk", None),
 ]
 
 

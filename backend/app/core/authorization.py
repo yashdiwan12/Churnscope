@@ -70,10 +70,12 @@ def current_profile(
     user: Annotated[AuthUser, Depends(current_user)],
     session: Annotated[Session, Depends(get_session)],
 ) -> UserProfile:
-    session.execute(pg_insert(UserProfile).values(id=user.id).on_conflict_do_nothing())
-    session.commit()
     profile = session.get(UserProfile, user.id)
-    assert profile is not None
+    if profile is None:  # the common path only reads; insert once, tolerating a concurrent insert
+        session.execute(pg_insert(UserProfile).values(id=user.id).on_conflict_do_nothing())
+        session.commit()
+        profile = session.get(UserProfile, user.id)
+        assert profile is not None
     return profile
 
 

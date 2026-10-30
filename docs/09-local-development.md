@@ -39,6 +39,8 @@ cd backend && uv run uvicorn app.main:app --reload --port 8000   # docs at /docs
 cd frontend && uv run --env-file ../.env streamlit run app.py    # http://localhost:8501 (sign-in needs SUPABASE_URL and SUPABASE_ANON_KEY)
 ```
 
+Launch the frontend from the `frontend/` directory: Streamlit reads `frontend/.streamlit/config.toml` (minimal toolbar, no error details shown to users, no usage tracking) from the directory it is started in, so starting it from elsewhere skips those settings.
+
 ## 9.4 Data
 
 ```bash

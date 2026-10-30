@@ -58,7 +58,15 @@ Windows are `[start, end)`, tz-aware (naive timestamps -> 422), max 366 days; de
 | `GET /analytics/retention` | `periods` (1-26, default 8) | all signup-week cohorts; cells carry `eligible` and `complete` |
 | `GET /analytics/engagement` | `start`, `end` | see above |
 
-Empty data returns zeros / `null` rates, not errors. These endpoints are **not authenticated yet** (Phase 5).
+Empty data returns zeros / `null` rates, not errors. These endpoints require a signed-in, allow-listed user (Phase 5).
+
+### Dashboard display rules (Phase 6)
+
+These are presentation rules, not metric definitions:
+- **Inclusive end date.** The UI date picker's end date is inclusive; the app sends midnight UTC of the next day as the API's exclusive `end`. Ranges are limited to 366 days, matching the API.
+- **Low n.** A retention cell is labelled "low n" when its `eligible` count (the denominator of the rate shown) is below 20 (`LOW_N_MIN_ELIGIBLE` in `frontend/charts.py`). The unit is the cell, not the cohort.
+- **Incomplete cells** (not every cohort member has had the full period) are drawn grey and labelled, never coloured by their rate.
+- **Rates** are shown to one decimal with their counts (`n=`); a missing rate shows `n/a`, never `NaN`.
 
 ## Churn label (decided in Phase 4)
 

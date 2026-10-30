@@ -13,6 +13,21 @@ def data_through(session: Session) -> pd.Timestamp | None:
     return None if ts is None else pd.Timestamp(ts).tz_convert("UTC")
 
 
+def latest_event_id(session: Session) -> int | None:
+    """Highest event id, which grows with every insert whatever the event's own timestamp is."""
+    return session.scalar(select(func.max(Event.id)))
+
+
+def customer_external_ids(session: Session, pks: list[int]) -> dict[int, str]:
+    """Map internal customer ids to external ids; unknown ids are absent from the result."""
+    if not pks:
+        return {}
+    rows = session.execute(
+        select(Customer.id, Customer.external_customer_id).where(Customer.id.in_(pks))
+    )
+    return {pk: ext for pk, ext in rows}
+
+
 def resolve_customers(session: Session, external_ids: list[str]) -> dict[str, int]:
     """Map external customer ids to internal ids; unknown ids are absent from the result."""
     rows = session.execute(
