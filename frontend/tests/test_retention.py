@@ -40,9 +40,10 @@ def test_retention_renders_time_basis_chart_and_labels(monkeypatch):
     assert BANNER in shown
     assert "Cohorts as of 30 Oct 2026" in shown
     assert "Data through 30 Oct 2026" in shown
-    assert "low n" in shown
-    assert "incomplete" in shown
-    assert "50.0% n=40" in shown
+    table = at.dataframe[0].value
+    assert "Incomplete \u00b7 low n" in table["Status"].tolist()
+    assert "Complete" in table["Status"].tolist()
+    assert 50.0 in table["Retention"].tolist()
     assert len(at.get("plotly_chart")) == 1
 
 
@@ -88,7 +89,8 @@ def test_retention_no_warning_when_all_complete(monkeypatch):
 def test_retention_none_rate_shows_not_enough_data_without_nan(monkeypatch):
     at, _ = retention_app(monkeypatch)
     shown = texts(run(at))
-    assert "not enough data" in shown
+    assert at.dataframe[0].value["Retention"].isna().sum() == 1
+    assert "not enough data" in str(at.get("plotly_chart")[0].proto.spec)
     assert "nan" not in shown.lower()
     assert "none" not in shown.lower()
 
@@ -105,3 +107,35 @@ def test_retention_503_shows_retry(monkeypatch):
     shown = texts(run(at))
     assert "The service is unavailable. Please try again shortly." in shown
     assert "Retry" in [b.label for b in at.get("button")]
+
+
+def test_retention_cell_details_is_a_collapsed_table(monkeypatch):
+    at, _ = retention_app(monkeypatch)
+    shown = texts(run(at))
+    boxes = [e for e in at.expander if e.label == "Cell details"]
+    assert len(boxes) == 1
+    assert boxes[0].proto.expanded is False
+    frames = boxes[0].dataframe
+    assert len(frames) == 1
+    table = frames[0].value
+    assert list(table.columns) == [
+        "Cohort",
+        "Week",
+        "Retention",
+        "Eligible",
+        "Cohort size",
+        "Status",
+    ]
+    assert len(table) == 5
+    row = table.iloc[3]
+    assert (row["Cohort"], row["Week"], row["Eligible"], row["Cohort size"]) == (
+        "2026-10-12",
+        1,
+        19,
+        19,
+    )
+    assert row["Retention"] == 5 / 19 * 100
+    assert row["Status"] == "Incomplete \u00b7 low n"
+    assert "Cohort 2026-10-05, week 0:" not in shown
+    assert "nan" not in shown.lower()
+    assert "none" not in shown.lower()

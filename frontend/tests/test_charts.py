@@ -7,6 +7,7 @@ from charts import (
     funnel_bar,
     retention_heatmap,
     retention_matrix,
+    retention_table,
     risk_histogram,
 )
 
@@ -126,3 +127,52 @@ def test_risk_histogram_has_ten_bins_threshold_line_and_labels():
     assert fig.layout.xaxis.title.text == "risk score (relative)"
     assert fig.layout.yaxis.title.text == "customers"
     assert "probability" not in fig.to_json().lower()
+
+
+TABLE_COLUMNS = ["Cohort", "Week", "Retention", "Eligible", "Cohort size", "Status"]
+
+
+def test_retention_table_columns_dtypes_and_values():
+    cells = [
+        {**_cell(20, retention=0.5), "cohort": "2026-10-05", "period": 1},
+        {**_cell(19, complete=False, retention=0.25), "cohort": "2026-10-12", "period": 2},
+    ]
+    table = retention_table(retention_matrix(cells))
+    assert list(table.columns) == TABLE_COLUMNS
+    assert table["Cohort"].tolist() == ["2026-10-05", "2026-10-12"]
+    assert table["Week"].tolist() == [1, 2]
+    assert table["Week"].dtype.kind == "i"
+    assert table["Eligible"].dtype.kind == "i"
+    assert table["Cohort size"].dtype.kind == "i"
+    assert table["Retention"].dtype.kind == "f"
+    assert table["Retention"].tolist() == [50.0, 25.0]
+    assert table["Eligible"].tolist() == [20, 19]
+    assert table["Cohort size"].tolist() == [40, 40]
+
+
+def test_retention_table_status_strings_and_low_n_suffix():
+    table = retention_table(
+        retention_matrix(
+            [_cell(19), _cell(20), _cell(19, complete=False), _cell(20, complete=False)]
+        )
+    )
+    assert table["Status"].tolist() == [
+        "Complete \u00b7 low n",
+        "Complete",
+        "Incomplete \u00b7 low n",
+        "Incomplete",
+    ]
+
+
+def test_retention_table_keeps_missing_rate_missing_and_incomplete_rate_shown():
+    table = retention_table(
+        retention_matrix([_cell(0, retention=None), _cell(20, complete=False, retention=0.9)])
+    )
+    assert table["Retention"].isna().tolist() == [True, False]
+    assert table["Retention"][1] == 90.0
+
+
+def test_retention_table_empty_matrix_has_the_columns():
+    table = retention_table(retention_matrix([]))
+    assert table.empty
+    assert list(table.columns) == TABLE_COLUMNS

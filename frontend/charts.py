@@ -111,6 +111,29 @@ def retention_matrix(cells: list[dict]) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=MATRIX_COLUMNS)
 
 
+RETENTION_TABLE_COLUMNS = ["Cohort", "Week", "Retention", "Eligible", "Cohort size", "Status"]
+
+
+def _status(complete: bool, low_n: bool) -> str:
+    text = "Complete" if complete else "Incomplete"
+    return f"{text} \u00b7 low n" if low_n else text
+
+
+def retention_table(matrix: pd.DataFrame) -> pd.DataFrame:
+    """The matrix as a plain table: retention in percent (NaN when missing), one status string."""
+    return pd.DataFrame(
+        {
+            "Cohort": matrix["cohort"].astype(str),
+            "Week": matrix["period"].astype(int),
+            "Retention": pd.to_numeric(matrix["retention"], errors="coerce").astype(float) * 100,
+            "Eligible": matrix["eligible"].astype(int),
+            "Cohort size": matrix["cohort_size"].astype(int),
+            "Status": [_status(c, n) for c, n in zip(matrix["complete"], matrix["low_n"])],
+        },
+        columns=RETENTION_TABLE_COLUMNS,
+    ).reset_index(drop=True)
+
+
 def retention_heatmap(matrix: pd.DataFrame) -> go.Figure | None:
     """Cohort-by-period heatmap; incomplete cells are grey rather than coloured by their rate."""
     if matrix.empty:

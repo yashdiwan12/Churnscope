@@ -4,7 +4,7 @@ import streamlit as st
 
 import data
 from api_client import ApiClient, ApiError, NotAllowed, NotSignedIn, ServiceUnavailable
-from charts import retention_heatmap, retention_matrix
+from charts import retention_heatmap, retention_matrix, retention_table
 from labels import cohorts_label, freshness_label
 from states import render_empty, render_error
 
@@ -34,5 +34,9 @@ def render(api: ApiClient) -> None:
         )
     st.plotly_chart(figure, width="stretch")
     with st.expander("Cell details"):
-        for row in matrix.itertuples():
-            st.caption(f"Cohort {row.cohort}, week {row.period}: {row.label}")
+        st.dataframe(
+            retention_table(matrix),
+            column_config={"Retention": st.column_config.NumberColumn(format="%.1f%%")},
+            hide_index=True,
+            width="stretch",
+        )
