@@ -634,6 +634,15 @@ reproducible.
 
 **Exit:** user can complete the core analytics flow in the UI.
 
+### Milestone 6b --- Bring your own data (added after Milestone 6)
+
+-   [ ] Design first (ownership migration, dataset-scoped queries and cache keys, CSV validation and event-name mapping, size limits for the free database tier, how to score a user's data with a model trained on synthetic data).
+-   [ ] Per-user datasets with owner-only access and tests.
+-   [ ] Upload, validate and ingest a user's events.
+-   [ ] Analytics and a churn report on the user's own data.
+
+**Exit:** a signed-in user sees analytics and a churn report for their own file and nobody else's.
+
 ### Milestone 7 --- Quality and documentation
 
 -   [ ] Add unit/integration tests.

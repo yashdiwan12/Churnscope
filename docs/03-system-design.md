@@ -60,7 +60,8 @@ flowchart TD
 | GET | `/analytics/retention` | required | Cohort retention  `[Built]` |
 | GET | `/analytics/engagement` | required | Activity trends  `[Built]` |
 | GET | `/customers/{customer_id}/insights` | required | Per-customer insights  `[Planned]` |
-| POST | `/churn/predict` | required | Churn-risk estimate  `[Built]` |
+| POST | `/churn/predict` | required | Churn-risk estimate for given customer ids  `[Built]` |
+| GET | `/churn/at-risk` | required | Ranked, paged churn-risk list for all eligible customers, score histogram, model evaluation  `[Built]` (Phase 6) |
 | GET | `/me` | required | Signed-in user (id, email, created_at)  `[Built]` |
 | GET/POST | `/me/reports` | required | List / save own reports (max 100)  `[Built]` |
 | DELETE | `/me/reports/{id}` | required | Delete own report; 404 for missing or someone else's  `[Built]` |
@@ -181,23 +182,31 @@ flowchart LR
 
 ```
 frontend/
-├── app.py            entry, sign-in/out, session state
+├── app.py            config, demo banner, gate, st.navigation over the five views
+├── gate.py           sign-in flow, GET /me on every rerun, stops on 403/503
+├── auth.py           PKCE and token helpers (no Streamlit)
 ├── api_client.py     httpx wrapper: token header, timeouts, error mapping
-└── views/            (st.navigation) Overview · Funnels · Retention · Engagement · Churn Risk · My Workspace (P1)
+├── data.py           one cached (5 min) fetch per endpoint
+├── filters.py        date sidebar, inclusive end date to API range
+├── labels.py         window, freshness and percent text
+├── charts.py         pure payload-to-Plotly functions
+├── states.py         fixed-message error, empty and retry rendering
+└── views/            overview · funnel · retention · engagement · churn (My Workspace deferred)
 ```
 
 ```mermaid
 flowchart LR
-    app["app.py<br/>sign-in/out, session state"] --> pages
-    subgraph pages["pages/"]
+    app["app.py<br/>banner, st.navigation"] --> gate["gate.py<br/>GET /me every rerun"]
+    gate -->|allowed| pages
+    subgraph pages["views/"]
         ov["Overview"]
         fu["Funnels"]
         re["Retention"]
         en["Engagement"]
         ch["Churn Risk"]
-        ws["My Workspace (P1)"]
     end
-    pages --> cl["api_client.py<br/>token header, timeouts, error mapping"]
+    pages --> da["data.py<br/>5 min cache"]
+    da --> cl["api_client.py<br/>token header, timeouts, error mapping"]
     cl --> api["FastAPI"]
     cl -.-> auth["Supabase Auth"]
 ```
