@@ -30,7 +30,8 @@ flowchart LR
 | 3 | Analytics | Active users, funnel, retention, engagement + API | Endpoints correct vs hand-checked examples | Done | [log](history/phase-3-analytics/history.md) |
 | 4 | Churn model | Label, features, training, evaluation, inference | Reproducible eval, validated API inference | Done | [log](history/phase-4-churn-model/history.md) |
 | 5 | Auth | Google OAuth, JWT verification, ownership | Cross-user access fails safely | Done | [log](history/phase-5-auth/history.md) |
-| 6 | Dashboard | Streamlit pages wired to API | Core analytics flow works in UI | Not started | [log](history/phase-6-dashboard/history.md) |
+| 6 | Dashboard | Streamlit pages wired to API | Core analytics flow works in UI | In progress (branch `phase-6-dashboard`: backend endpoint and four pages built and reviewed) |
+| 6b | Bring your own data | User uploads, dataset ownership, churn report on own data | A user sees analytics for their own file and nobody else's | Not started (design pending) | [log](history/phase-6-dashboard/history.md) | [log](history/phase-6-dashboard/history.md) |
 | 7 | Quality & docs | Tests, security review, screenshots, deploy | New developer can follow README end to end | Not started | [log](history/phase-7-quality-and-docs/history.md) |
 
 ## Phase log template
