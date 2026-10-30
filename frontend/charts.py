@@ -54,6 +54,31 @@ def funnel_bar(steps: list[dict]) -> go.Figure | None:
     return fig
 
 
+def adoption_bars(feature_adoption: dict[str, float]) -> go.Figure | None:
+    """Share of active users who used each feature, largest first."""
+    if not feature_adoption:
+        return None
+    ranked = sorted(feature_adoption.items(), key=lambda item: item[1], reverse=True)
+    fig = go.Figure(
+        go.Bar(
+            x=[share for _, share in ranked],
+            y=[name for name, _ in ranked],
+            orientation="h",
+            text=[percent(share) for _, share in ranked],
+            textposition="auto",
+            name="Share of active users",
+        )
+    )
+    fig.update_layout(
+        title="Feature adoption",
+        xaxis_title="Share of active users",
+        xaxis={"tickformat": ".0%", "range": [0, 1]},
+        yaxis={"autorange": "reversed"},
+        margin={"t": 40, "b": 40},
+    )
+    return fig
+
+
 MATRIX_COLUMNS = [
     "cohort",
     "period",

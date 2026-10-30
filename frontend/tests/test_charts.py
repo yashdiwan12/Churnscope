@@ -2,6 +2,7 @@ import plotly.graph_objects as go
 
 from charts import (
     LOW_N_MIN_ELIGIBLE,
+    adoption_bars,
     dau_line,
     funnel_bar,
     retention_heatmap,
@@ -87,3 +88,16 @@ def test_retention_heatmap_hover_shows_label_not_raw_z():
     for trace in figure.data:
         assert "%{text}" in trace.hovertemplate
         assert "%{z}" not in trace.hovertemplate
+
+
+def test_adoption_bars_none_for_empty():
+    assert adoption_bars({}) is None
+
+
+def test_adoption_bars_sorted_descending_with_one_decimal_percent_text():
+    fig = adoption_bars({"export": 0.05, "login": 0.9, "report_viewed": 0.425})
+    bar = fig.data[0]
+    assert list(bar.y) == ["login", "report_viewed", "export"]
+    assert list(bar.x) == [0.9, 0.425, 0.05]
+    assert list(bar.text) == ["90.0%", "42.5%", "5.0%"]
+    assert "active users" in fig.layout.xaxis.title.text

@@ -68,6 +68,16 @@ FUNNEL_OK = {
     "note": "Users signed up in the last 14 days are excluded.",
 }
 
+ENGAGEMENT_OK = {
+    "window": OVERVIEW_OK["window"],
+    "active_users": 120,
+    "active_days_per_user_mean": 4.26,
+    "active_days_per_user_median": 3.0,
+    "events_per_active_user": 36.04,
+    "median_hours_between_activities": None,
+    "feature_adoption": {"export": 0.05, "login": 0.9, "report_viewed": 0.425},
+}
+
 
 class Requested(list):
     """The requested paths (a plain list of str); `.queries` holds each request's query dict."""
