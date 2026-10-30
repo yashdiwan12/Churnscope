@@ -17,6 +17,7 @@ PAGES = [
 ]
 
 st.set_page_config(page_title="Churnscope", layout="wide")
+st.markdown("<style>footer {visibility: hidden;}</style>", unsafe_allow_html=True)
 st.title("Churnscope")
 st.caption("Product analytics and churn intelligence")
 st.info(BANNER)
