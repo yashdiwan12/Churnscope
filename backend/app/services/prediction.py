@@ -1,11 +1,20 @@
 """Churn-risk inference. Uses the same feature code as training (app.services.features)."""
 
+import threading
+
 import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.db import repositories
 from app.ml.artifact import ModelBundle
-from app.schemas.churn import CustomerPrediction, PredictResponse
+from app.schemas.churn import (
+    AtRiskOut,
+    AtRiskRow,
+    CustomerPrediction,
+    Evaluation,
+    HistogramBin,
+    PredictResponse,
+)
 from app.services import features
 
 CAVEAT = (
@@ -81,5 +90,113 @@ def predict(
         horizon_days=features.HORIZON_DAYS,
         decision_threshold=bundle.threshold,
         predictions=results,
+        caveat=CAVEAT,
+    )
+
+
+# ----------------------------------------------------------------------------- ranked list
+_BINS = 10
+# One entry: (model_version, cutoff, latest event id) -> scored frame. The key uses the highest
+# event id, not the latest timestamp: a late event with an old timestamp leaves max(timestamp)
+# unchanged but always raises max(id), so the list can never go stale.
+_cache_lock = threading.Lock()
+_cache: tuple[tuple, pd.DataFrame] | None = None
+
+
+def clear_at_risk_cache() -> None:
+    global _cache
+    with _cache_lock:
+        _cache = None
+
+
+def score_all(session: Session, bundle: ModelBundle, cutoff: pd.Timestamp) -> pd.DataFrame:
+    """Score every eligible customer at ``cutoff``.
+
+    Columns ``customer_id`` (external id) and ``risk_score`` (rounded to 4 places), sorted by
+    score descending then id ascending. Empty when nobody is eligible.
+    """
+    empty = pd.DataFrame(
+        {"customer_id": pd.Series(dtype=str), "risk_score": pd.Series(dtype=float)}
+    )
+    x = features.build_features(repositories.load_events(session, until=cutoff), [cutoff])
+    if x.empty:
+        return empty
+    x = x[bundle.metadata["feature_columns"]]  # exact training column order
+    proba = bundle.pipeline.predict_proba(x)[:, 1]
+    pks = [int(p) for p in x.index.get_level_values("customer_id")]
+    names = repositories.customer_external_ids(session, pks)
+    frame = pd.DataFrame(
+        {"customer_id": [names[p] for p in pks], "risk_score": [round(float(p), 4) for p in proba]}
+    )
+    return frame.sort_values(["risk_score", "customer_id"], ascending=[False, True]).reset_index(
+        drop=True
+    )
+
+
+def _scored(session: Session, bundle: ModelBundle, cutoff: pd.Timestamp) -> pd.DataFrame:
+    global _cache
+    key = (bundle.version, cutoff, repositories.latest_event_id(session))
+    with _cache_lock:
+        if _cache is not None and _cache[0] == key:
+            return _cache[1]
+        frame = score_all(session, bundle, cutoff)
+        _cache = (key, frame)
+        return frame
+
+
+def _evaluation(bundle: ModelBundle) -> Evaluation:
+    metrics = bundle.metadata.get("test_metrics") or {}
+    data = bundle.metadata.get("data") or {}
+    return Evaluation(
+        roc_auc=metrics.get("roc_auc"),
+        f1=metrics.get("f1"),
+        precision=metrics.get("precision"),
+        recall=metrics.get("recall"),
+        threshold=metrics.get("threshold"),
+        test_churn_rate=metrics.get("test_churn_rate"),
+        n=metrics.get("n"),
+        synthetic=data.get("synthetic"),
+    )
+
+
+def at_risk(session: Session, bundle: ModelBundle, limit: int, offset: int) -> AtRiskOut:
+    cutoff = default_cutoff(session)
+    scored = _scored(session, bundle, cutoff) if cutoff is not None else None
+    scores = [] if scored is None else scored["risk_score"].tolist()
+
+    # Integer arithmetic on the rounded scores: float bin edges would misplace 0.3, 0.7, etc.
+    counts = [0] * _BINS
+    for s in scores:
+        counts[min(round(s * 10000) // 1000, _BINS - 1)] += 1
+    histogram = [
+        HistogramBin(bin_start=i / _BINS, bin_end=(i + 1) / _BINS, count=c)
+        for i, c in enumerate(counts)
+    ]
+
+    rows = []
+    if scored is not None:
+        page = scored.iloc[offset : offset + limit]
+        rows = [
+            AtRiskRow(
+                rank=offset + i + 1,
+                customer_id=r.customer_id,
+                risk_score=r.risk_score,
+                predicted_class="at_risk" if r.risk_score >= bundle.threshold else "not_at_risk",
+            )
+            for i, r in enumerate(page.itertuples())
+        ]
+
+    return AtRiskOut(
+        model_version=bundle.version,
+        cutoff=cutoff,
+        data_through=repositories.data_through(session),
+        window_days=features.WINDOW_DAYS,
+        horizon_days=features.HORIZON_DAYS,
+        decision_threshold=bundle.threshold,
+        eligible_customers=len(scores),
+        at_risk_count=sum(1 for s in scores if s >= bundle.threshold),
+        score_histogram=histogram,
+        rows=rows,
+        evaluation=_evaluation(bundle),
         caveat=CAVEAT,
     )
