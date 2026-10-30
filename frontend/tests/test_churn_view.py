@@ -37,6 +37,17 @@ def with_changes(**changes):
     return body
 
 
+def expander(at, label):
+    found = [e for e in at.expander if e.label == label]
+    assert len(found) == 1, [e.label for e in at.expander]
+    return found[0]
+
+
+def inside(box):
+    """Visible text of one container (an expander)."""
+    return "\n".join(str(el.value) for kind in ("caption", "markdown") for el in box.get(kind))
+
+
 def calls(requested):
     return [q for p, q in zip(requested, requested.queries) if p == "/churn/at-risk"]
 
@@ -49,27 +60,41 @@ def test_baseline_note():
     assert baseline_note("churn-lr-other") == NAIVE
 
 
-def test_churn_renders_time_basis_counts_caveat_and_evaluation(monkeypatch):
+def test_churn_renders_time_basis_counts_and_caveat(monkeypatch):
     at, _ = churn_app(monkeypatch)
     shown = texts(run(at))
     assert BANNER in shown
     assert "Scored at cutoff 30 Oct 2026 using the 28 days before it" in shown
     assert "Data through 30 Oct 2026" in shown
-    assert "churn-lr-e330fa34d3" in shown
-    assert "30 days" in shown
-    assert "120" in shown
-    assert "18" in shown
-    assert "n=120" in shown
+    assert "Scores estimate which customers are likely to go quiet over the next 30 days." in shown
+    assert "Eligible customers scored: 120" in shown
+    assert "Eligible customers scored: 120 (n=120)" not in shown
+    assert "At risk (score at or above the threshold): 18 (n=120)" in shown
     assert AT_RISK_OK["caveat"] in shown
-    assert "ROC-AUC: 0.879" in shown
-    assert "F1: 0.746" in shown
-    assert "Precision: 0.700" in shown
-    assert "Recall: 0.800" in shown
-    assert "Test churn rate: 35.0%" in shown
-    assert "Test set size n: 400" in shown
-    assert "Test data synthetic: yes" in shown
-    assert "does not clearly beat" in shown
     assert len(at.get("plotly_chart")) == 1
+
+
+def test_churn_model_details_are_in_the_collapsed_about_expander(monkeypatch):
+    at, _ = churn_app(monkeypatch)
+    run(at)
+    box = expander(at, "About this model")
+    assert box.proto.expanded is False
+    details = inside(box)
+    assert "churn-lr-e330fa34d3" in details
+    assert "ROC-AUC: 0.879" in details
+    assert "F1: 0.746" in details
+    assert "Precision: 0.700" in details
+    assert "Recall: 0.800" in details
+    assert "Test churn rate: 35.0%" in details
+    assert "Test set size n: 400" in details
+    assert "Test data synthetic: yes" in details
+    assert "does not clearly beat" in details
+    outside = "\n".join(
+        str(el.value) for kind in ("caption", "markdown") for el in at.main.get(kind)
+    )
+    main_only = outside.replace(details, "")
+    for text in ("ROC-AUC", "Test churn rate", "does not clearly beat", "churn-lr-e330fa34d3"):
+        assert text not in main_only
 
 
 def test_churn_labels_never_say_probability(monkeypatch):
@@ -84,12 +109,13 @@ def test_churn_labels_never_say_probability(monkeypatch):
 def test_churn_evaluation_none_fields_show_na(monkeypatch):
     evaluation = dict.fromkeys(AT_RISK_OK["evaluation"])
     at, _ = churn_app(monkeypatch, body=with_changes(evaluation=evaluation))
-    shown = texts(run(at))
-    assert "ROC-AUC: n/a" in shown
-    assert "Test churn rate: n/a" in shown
-    assert "Test set size n: n/a" in shown
-    assert "Test data synthetic: n/a" in shown
-    assert "none" not in shown.lower()
+    run(at)
+    details = inside(expander(at, "About this model"))
+    assert "ROC-AUC: n/a" in details
+    assert "Test churn rate: n/a" in details
+    assert "Test set size n: n/a" in details
+    assert "Test data synthetic: n/a" in details
+    assert "none" not in details.lower()
 
 
 def test_churn_table_columns_and_rows(monkeypatch):
@@ -99,7 +125,23 @@ def test_churn_table_columns_and_rows(monkeypatch):
     assert list(frame.columns) == ["rank", "customer", "risk score (relative)", "predicted class"]
     assert frame["customer"].tolist() == ["cust-001", "cust-002", "cust-003"]
     assert frame["rank"].tolist() == [1, 2, 3]
+    assert frame["predicted class"].tolist() == ["At risk", "At risk", "Not at risk"]
+    assert frame["risk score (relative)"].tolist() == ["0.93", "0.88", "0.41"]
     assert calls(requested)[-1] == {"limit": 50, "offset": 0}
+
+
+def test_churn_unknown_predicted_class_is_shown_as_is(monkeypatch):
+    rows = [{**AT_RISK_OK["rows"][0], "predicted_class": "mystery"}]
+    at, _ = churn_app(monkeypatch, body=with_changes(rows=rows))
+    run(at)
+    assert at.dataframe[0].value["predicted class"].tolist() == ["mystery"]
+
+
+def test_churn_page_input_shown_after_a_successful_fetch(monkeypatch):
+    at, _ = churn_app(monkeypatch)
+    run(at)
+    assert len(at.number_input) == 1
+    assert at.number_input[0].key == "churn_page"
 
 
 def test_churn_page_two_requests_offset_50(monkeypatch):
@@ -114,6 +156,7 @@ def test_churn_page_beyond_end_does_not_crash(monkeypatch):
     at, _ = churn_app(monkeypatch, body=with_changes(rows=[]))
     shown = texts(run(at))
     assert "No customers on this page" in shown
+    assert len(at.number_input) == 1  # still there, so the user can page back
 
 
 def test_churn_empty_when_no_eligible_customers(monkeypatch):
@@ -123,6 +166,7 @@ def test_churn_empty_when_no_eligible_customers(monkeypatch):
     assert "No customers to score yet" in shown
     assert len(at.get("plotly_chart")) == 0
     assert len(at.dataframe) == 0
+    assert len(at.number_input) == 0
 
 
 def test_churn_empty_when_cutoff_is_none(monkeypatch):
@@ -132,6 +176,7 @@ def test_churn_empty_when_cutoff_is_none(monkeypatch):
     assert "No customers to score yet" in shown
     assert len(at.get("plotly_chart")) == 0
     assert len(at.dataframe) == 0
+    assert len(at.number_input) == 0
 
 
 def test_churn_503_shows_retry_without_server_text(monkeypatch):
@@ -141,3 +186,4 @@ def test_churn_503_shows_retry_without_server_text(monkeypatch):
     assert "model not loaded" not in shown
     assert "Retry" in [b.label for b in at.get("button")]
     assert len(at.dataframe) == 0
+    assert len(at.number_input) == 0

@@ -39,9 +39,13 @@ def _evaluation(evaluation: dict) -> None:
     st.caption(f"Test data synthetic: {kind}")
 
 
+_CLASS_LABELS = {"at_risk": "At risk", "not_at_risk": "Not at risk"}
+
+
 def render(api: ApiClient) -> None:
     st.header("Churn Risk")
-    page = int(st.number_input("Page", min_value=1, value=1, step=1, key="churn_page"))
+    # The page input appears only after a successful fetch, so its value is read before it.
+    page = max(1, int(st.session_state.get("churn_page", 1)))
     offset = (page - 1) * PAGE_SIZE
     try:
         with st.spinner("Loading churn risk..."):
@@ -57,9 +61,11 @@ def render(api: ApiClient) -> None:
     st.caption(cutoff_label(result["cutoff"], result["window_days"]))
     st.caption(freshness_label(result["data_through"]))
     eligible = result["eligible_customers"]
-    st.caption(f"Model version: {result['model_version']}")
-    st.caption(f"Prediction horizon: {result['horizon_days']} days")
-    st.caption(f"Eligible customers scored: {eligible:,} (n={eligible:,})")
+    st.caption(
+        "Scores estimate which customers are likely to go quiet over the next "
+        f"{result['horizon_days']} days."
+    )
+    st.caption(f"Eligible customers scored: {eligible:,}")
     st.caption(
         f"At risk (score at or above the threshold): {result['at_risk_count']:,} (n={eligible:,})"
     )
@@ -67,24 +73,30 @@ def render(api: ApiClient) -> None:
         "Each customer has a risk score (relative): higher means more at risk, not a likelihood."
     )
     st.caption(result["caveat"])
-    st.caption(baseline_note(result["model_version"]))
+    with st.expander("About this model"):
+        st.caption(f"Model version: {result['model_version']}")
+        _evaluation(result["evaluation"])
+        st.caption(baseline_note(result["model_version"]))
 
     figure = risk_histogram(result["score_histogram"], result["decision_threshold"])
     if figure is not None:
         st.plotly_chart(figure, width="stretch")
 
+    st.number_input("Page", min_value=1, value=1, step=1, key="churn_page")
     rows = result["rows"]
     if rows:
         st.dataframe(
             {
                 "rank": [row["rank"] for row in rows],
                 "customer": [row["customer_id"] for row in rows],
-                "risk score (relative)": [row["risk_score"] for row in rows],
-                "predicted class": [row["predicted_class"] for row in rows],
+                "risk score (relative)": [f"{row['risk_score']:.2f}" for row in rows],
+                "predicted class": [
+                    _CLASS_LABELS.get(row["predicted_class"], row["predicted_class"])
+                    for row in rows
+                ],
             },
             hide_index=True,
             width="stretch",
         )
     else:
         render_empty("No customers on this page")
-    _evaluation(result["evaluation"])
