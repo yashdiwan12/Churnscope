@@ -57,6 +57,14 @@ Commit `.env.example`, never `.env`. Rotate any leaked credential immediately.
 
 Supabase project hardening (done by hand): Google provider on with a Testing-mode consent screen, redirect allow-list limited to the app origin, Email provider and anonymous sign-ins off.
 
+### Dashboard behaviour (Phase 6) `[Built]`
+
+- The gate calls `GET /me` on every Streamlit rerun, so a revoked allow-list entry or an expired token stops the user even when results are cached. 401 clears the session and shows sign-in; 403/503 show a fixed message with Sign out and stop the page.
+- Error messages shown to users are fixed strings; Streamlit's error details, toolbar and footer are hidden (`frontend/.streamlit/config.toml`, read only when launched from `frontend/`). Tokens are never rendered.
+- The sign-in link is a same-tab anchor to the Supabase authorize URL (PKCE).
+- Query parameters (`sort`, `limit`, `offset`, dates) are validated by the API; the UI cannot send a range over 366 days.
+- The 5-minute result cache is shared across users and is safe only while analytics data is shared (synthetic demo). Phase 6b must key it by dataset and user.
+
 Known limitations: the Streamlit session is lost on browser reload; the PKCE verifier store is per process; the allow-list is an environment variable (a change needs a restart).
 
 ## 6.5 Security checklist (Phase 7 gate)

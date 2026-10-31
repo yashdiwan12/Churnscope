@@ -1,6 +1,6 @@
 # History — phase-6-dashboard
 
-**Status:** done, merge pending · **Started:** 2026-10-30 · branch `phase-6-dashboard` (not merged)
+**Status:** done, merged into `main` · **Started:** 2026-10-30 · branch `phase-6-dashboard` (not merged)
 
 ## Done (each task independently reviewed; fix rounds logged in the SDD ledger, not in git)
 - Design spec and plan written, then revised after an external review (cache key by `max(events.id)` so late events cannot leave a stale list; inclusive end date sent as next-day midnight; 422 handling; time basis per page; gate stops on 403/503 even with cached data; model note pinned to the model version; low-n rule per cell).
@@ -21,6 +21,5 @@
 - Views take `render(api)` (not `render(api, filters)`); date validation also enforces the API's 366-day limit.
 
 ## Open
-- Merge into `main` (awaiting the user's go-ahead).
 - Deferred minors (ledger): one-time Streamlit log warning on the first sort change, sort resets to default after an error or empty run, `/me` uses a 10 s timeout so a cold database start shows "unavailable", customer-id sort is lexicographic, page number has no maximum, `date.today()` vs UTC default end date.
 - Phase 6b (uploads) needs its own design; Phase 7 inherits the deployment and consent-screen items.

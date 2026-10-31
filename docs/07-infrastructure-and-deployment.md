@@ -42,6 +42,10 @@ flowchart LR
 | `SUPABASE_URL` | backend, frontend | Project URL / JWKS |
 | `SUPABASE_JWT_SECRET` (or JWKS) | backend | Token verification |
 | `CORS_ORIGINS` | backend | Allowed dashboard origin(s) |
+| `ALLOWED_EMAILS`, `ALLOWED_EMAIL_DOMAINS` | backend | Who may sign in (empty = nobody) |
+| `INGEST_API_KEY` | backend | Service key for `POST /events` (unset = closed) |
+| `CHURN_MODEL_SHA256` | backend | Optional pin of the model file hash |
+| `APP_BASE_URL` | frontend | Dashboard origin used as the sign-in redirect |
 | `API_BASE_URL` | frontend | Deployed API URL |
 | `SUPABASE_ANON_KEY` | frontend | Public client key |
 
@@ -60,7 +64,7 @@ Per-environment values live in each host's secret store, never in Git. Streamlit
 
 ## 7.4 CI (GitHub Actions)
 
-On push/PR (`.github/workflows/ci.yml`): `uv sync` → ruff check and format check → `pytest` in `backend/` (and ruff in `frontend/`). The backend job starts a Postgres 16 service container and sets `TEST_DATABASE_URL`; under `CI` the DB tests fail rather than skip when the database is unreachable. Tests never touch the production Supabase project. `[Built]`. First GitHub run on 2026-10-29 passed (backend 112 tests with the Postgres service, frontend lint).
+On push/PR (`.github/workflows/ci.yml`): `uv sync` → ruff check and format check → `pytest` in `backend/` (and ruff in `frontend/`). The backend job starts a Postgres 16 service container and sets `TEST_DATABASE_URL`; under `CI` the DB tests fail rather than skip when the database is unreachable. Tests never touch the production Supabase project. `[Built]`. First GitHub run on 2026-10-29 passed (backend with the Postgres service; the frontend job now runs lint and its pytest suite).
 
 ## 7.5 Migrations
 

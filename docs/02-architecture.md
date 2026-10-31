@@ -18,13 +18,12 @@ flowchart TD
     train["Offline training"] --> art[["Versioned model artifact"]]
     art --> inf
 
-    class api,svc,an,ing,db,src,inf,train,art built
-    class ui,auth planned
+    class ui,auth,api,svc,an,ing,db,src,inf,train,art built
     classDef built fill:#d1fae5,stroke:#059669,color:#064e3b
     classDef planned fill:#f3f4f6,stroke:#9ca3af,stroke-dasharray: 5 3,color:#374151
 ```
 
-*Green = built, dashed grey = planned.*
+*Green = built (all components exist as of Phase 6).*
 
 ## Architectural decisions
 
@@ -64,15 +63,15 @@ flowchart LR
     r -. "5xx / 4xx" .-> resp([Response])
 ```
 
-## Failure behaviour `[Built]` (token checks pending)
+## Failure behaviour `[Built]`
 
-Built and tested: a missing or invalid model artifact returns 503 on `/churn/predict` while the rest of the API stays up; an unreachable or unconfigured database returns 503 `Database unavailable` (no connection details in the body) and `/health` stays up; a failed ingestion write is rolled back and never reported as success. Not yet: token checks (Phase 5) and frontend error states (Phase 6).
+Built and tested: a missing or invalid model artifact returns 503 on `/churn/predict` while the rest of the API stays up; an unreachable or unconfigured database returns 503 `Database unavailable` (no connection details in the body) and `/health` stays up; a failed ingestion write is rolled back and never reported as success. Token checks (Phase 5) and the dashboard's fixed-message error states with Retry (Phase 6) are built too.
 
 | Failure | Behaviour |
 |---|---|
 | Database down | API returns 503; writes never reported as successful |
 | Model artifact missing/invalid | `/churn/predict` returns 503; rest of API unaffected |
-| API timeout | Frontend shows an error state, never stale/fabricated data |
+| API timeout | Frontend shows "service unavailable" with Retry, never fabricated data; failures are not cached |
 | Invalid/expired token | 401; no data returned |
 
 ## Scaling notes (honest limits)

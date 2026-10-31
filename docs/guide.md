@@ -24,7 +24,7 @@ Start here. Churnscope turns product-activity events into engagement, funnel, re
 
 ```
 backend/    FastAPI app, services, ML, migrations, tests
-frontend/   Streamlit + Plotly dashboard
+frontend/   Streamlit + Plotly dashboard (app.py, gate, data, views/)
 data/       Dataset notes (raw/processed git-ignored)
 notebooks/  Exploration
 docs/       Documentation + per-phase history
@@ -38,4 +38,4 @@ Datasets → metric definitions → Pandas analytics → DB + ingestion → API 
 
 ## Where to go next
 
-Current status and the next steps are in [progress.md](../progress.md). Phase 5 (authentication) is built; its design and spike results are in [superpowers/specs/2026-10-29-phase5-auth-design.md](superpowers/specs/2026-10-29-phase5-auth-design.md). Measured model results and limits: [model_card.md](model_card.md).
+Current status and the next steps are in [progress.md](../progress.md). Phases 0-6 are built (the Streamlit dashboard is Phase 6; its design is in [superpowers/specs/2026-10-30-phase6-dashboard-design.md](superpowers/specs/2026-10-30-phase6-dashboard-design.md)). Authentication design and spike results are in [superpowers/specs/2026-10-29-phase5-auth-design.md](superpowers/specs/2026-10-29-phase5-auth-design.md). Measured model results and limits: [model_card.md](model_card.md).

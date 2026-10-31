@@ -1,6 +1,6 @@
 # 9. Local development
 
-> Backend setup, migrations, synthetic data, ingestion, analytics API, churn model training and the prediction endpoint are real (Phases 0-4). Auth and the dashboard pages are still to come. Tag changes in [history](10-project-history.md).
+> Everything through Phase 6 is real: backend, data, model, Google sign-in and authorization, and the Streamlit dashboard. Uploads (6b) and deployment (7) are still to come. Tag changes in [history](10-project-history.md).
 
 ## 9.1 Prerequisites
 

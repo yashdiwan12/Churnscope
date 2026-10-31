@@ -21,6 +21,9 @@
 | Duplicate counts after load | Different `event_id` per run | Ensure loader emits stable IDs |
 | Retention looks too low for recent cohorts | Incomplete cohorts | Expected; UI flags them |
 | Slow analytics | Missing index / large scan | `EXPLAIN ANALYZE`, add index per real query |
+| Dashboard says access not allowed (403) | Email not on `ALLOWED_EMAILS` / `ALLOWED_EMAIL_DOMAINS`, or not a Google sign-in | Update the allow-list, restart the API |
+| Dashboard shows service unavailable after a long idle | Free-tier database or API cold start | Click Retry; `/me` has a short timeout so the first load can fail once |
+| Churn list looks outdated after loading events | In-process cache keyed by the newest event id | Restart the API; a new event id rescored automatically |
 | OAuth redirect error | Redirect URL not registered | Add URL in Supabase + Google Cloud |
 
 ## 8.3 Logging

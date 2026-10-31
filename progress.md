@@ -2,7 +2,7 @@
 
 Live tracker of implementation progress per phase. Detailed notes, decisions, and evidence live in each phase's `docs/history/<phase>/history.md`; the phase summary table is in [docs/10-project-history.md](docs/10-project-history.md).
 
-**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-10-30 · Phase 6 done on branch `phase-6-dashboard` (merge pending): backend 281 and frontend 115 tests pass locally
+**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-10-31 · Phase 6 merged into `main`: backend 281 and frontend 115 tests pass locally at the last full run
 
 ## Summary
 
@@ -14,7 +14,7 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 | 3 | Analytics | ✅ Done | 6 / 6 |
 | 4 | Churn model | ✅ Done | 8 / 8 |
 | 5 | Authentication & authorization | ✅ Done | 8 / 8 |
-| 6 | Dashboard | ✅ Done (merge pending) | 7 / 7 |
+| 6 | Dashboard | ✅ Done (merged) | 7 / 7 |
 | 6b | Bring your own data (uploads) | ⬜ Not started (design pending) | — |
 | 7 | Quality & documentation | ⬜ Not started | 0 / 10 |
 
@@ -65,7 +65,7 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 - [x] Evaluation with baseline comparison
 - [x] Error and class-imbalance review
 - [x] Save model, schema, version metadata
-- [x] Inference service and tests (endpoint open until Phase 5 adds auth)
+- [x] Inference service and tests (endpoint now requires sign-in since Phase 5)
 - [x] Post-phase review passes: two independent code reviews, all findings fixed and logged in the history; data regenerated and model retrained
 
 ## Phase 5 — Authentication & authorization ✅  ([history](docs/history/phase-5-auth/history.md))
