@@ -7,6 +7,7 @@ import httpx
 
 TIMEOUT = 10
 ANALYTICS_TIMEOUT = 30
+IMPORT_TIMEOUT = 60
 
 
 class NotSignedIn(Exception):
@@ -40,6 +41,17 @@ class ApiClient:
 
     def post(self, path: str, json: Any = None, *, timeout: float | None = None) -> Any:
         return self._request("POST", path, timeout=timeout, json=json)
+
+    def post_file(
+        self,
+        path: str,
+        *,
+        file: tuple[str, bytes, str],
+        data: dict[str, str],
+        timeout: float | None = None,
+    ) -> Any:
+        """A multipart POST: `file` is (filename, content, content type), sent as field `file`."""
+        return self._request("POST", path, timeout=timeout, files={"file": file}, data=data)
 
     def delete(self, path: str, *, timeout: float | None = None) -> Any:
         return self._request("DELETE", path, timeout=timeout)

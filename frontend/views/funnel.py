@@ -5,13 +5,18 @@ import streamlit as st
 import data
 from api_client import ApiClient, ApiError, NotAllowed, NotSignedIn, ServiceUnavailable
 from charts import funnel_bar
+from dataset import Context
 from filters import date_range_sidebar
 from labels import freshness_label, percent, window_label
 from states import render_empty, render_error
 
 
-def render(api: ApiClient) -> None:
+def render(api: ApiClient, ctx: Context) -> None:
     st.header("Funnel")
+    if not ctx.capabilities["funnel"]:
+        missing = ", ".join(ctx.capabilities["funnel_missing"])
+        render_empty(f"The funnel needs these steps: {missing}.")
+        return
     selection = date_range_sidebar()
     window_days = st.sidebar.slider("Conversion window (days)", 1, 90, 14)
     if selection.error is not None:
@@ -19,7 +24,9 @@ def render(api: ApiClient) -> None:
         return
     try:
         with st.spinner("Loading the funnel..."):
-            result = data.funnel(api, selection.start, selection.end, window_days)
+            result = data.funnel(
+                api, ctx.dataset_id, ctx.user_id, selection.start, selection.end, window_days
+            )
     except (ApiError, NotAllowed, NotSignedIn, ServiceUnavailable) as exc:
         render_error(exc, retry_key="funnel_retry")
         return

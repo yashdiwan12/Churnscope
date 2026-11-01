@@ -5,10 +5,16 @@ import streamlit as st
 import data
 from api_client import ApiClient, ApiError, NotAllowed, NotSignedIn, ServiceUnavailable
 from charts import risk_histogram
+from dataset import Context
 from labels import cutoff_label, freshness_label, percent
 from states import render_empty, render_error
 
 PAGE_SIZE = 50
+NOT_AVAILABLE = "Churn scoring is not available for this dataset yet."
+DERIVED_NOTE = (
+    "Account age is unreliable: signup dates are derived from each customer's "
+    "first event in your file."
+)
 BASELINE_NOTE_FOR_VERSION = "churn-lr-e330fa34d3"  # the version docs/model_card.md was written for
 _BEATS_NOTE = (
     "On the test set this model does not clearly beat a one-line rule, customers "
@@ -47,8 +53,17 @@ _SORT_LABELS = {
 _CLASS_LABELS = {"at_risk": "At risk", "not_at_risk": "Not at risk"}
 
 
-def render(api: ApiClient) -> None:
+def render(api: ApiClient, ctx: Context) -> None:
     st.header("Churn Risk")
+    if not ctx.capabilities["churn"]:
+        render_empty(NOT_AVAILABLE)
+        return
+    if ctx.derived_signup:
+        st.caption(DERIVED_NOTE)
+    # Page 3 of one dataset means nothing in another.
+    if st.session_state.get("churn_dataset_seen", ctx.dataset_id) != ctx.dataset_id:
+        st.session_state["churn_page"] = 1
+    st.session_state["churn_dataset_seen"] = ctx.dataset_id
     # The page and sort inputs appear only after a successful fetch, so their values are read
     # before them. A new sort restarts at page 1; the page widget is not created yet in this run,
     # so its key may be assigned here.
@@ -62,7 +77,7 @@ def render(api: ApiClient) -> None:
     offset = (page - 1) * PAGE_SIZE
     try:
         with st.spinner("Loading churn risk..."):
-            result = data.at_risk(api, PAGE_SIZE, offset, sort)
+            result = data.at_risk(api, ctx.dataset_id, ctx.user_id, PAGE_SIZE, offset, sort)
     except (ApiError, NotAllowed, NotSignedIn, ServiceUnavailable) as exc:
         render_error(exc, retry_key="churn_retry")
         return

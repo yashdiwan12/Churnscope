@@ -1,8 +1,10 @@
 """One cached fetch per endpoint. The leading underscore keeps the ApiClient out of the cache key.
 
 Only successes are cached: st.cache_data stores nothing when the function raises. The cache is
-shared by every user, which is safe only while all allowed users see the same demo data
-(assumption A1) and because the gate re-checks `/me` on every rerun before any page renders.
+shared by every user, so every key carries `dataset_id` and `user_id` (the arguments after
+`_api`): an upload's results are never served to another user. `dataset.select` re-checks the
+visible datasets on every rerun, and the gate re-checks `/me`, before any page renders. After an
+import or delete the acting session calls `st.cache_data.clear()`.
 """
 
 from typing import Any
@@ -14,31 +16,48 @@ from api_client import ANALYTICS_TIMEOUT, ApiClient
 TTL_SECONDS = 300
 
 
-def _get(api: ApiClient, path: str, **params: Any) -> dict:
-    sent = {key: value for key, value in params.items() if value is not None}
+def _get(api: ApiClient, path: str, dataset_id: int, **params: Any) -> dict:
+    sent = {"dataset_id": dataset_id} | {
+        key: value for key, value in params.items() if value is not None
+    }
     return api.get(path, timeout=ANALYTICS_TIMEOUT, **sent)
 
 
 @st.cache_data(ttl=TTL_SECONDS, show_spinner=False)
-def overview(_api: ApiClient, start: str | None, end: str | None) -> dict:
-    return _get(_api, "/analytics/overview", start=start, end=end)
+def overview(
+    _api: ApiClient, dataset_id: int, user_id: str, start: str | None, end: str | None
+) -> dict:
+    return _get(_api, "/analytics/overview", dataset_id, start=start, end=end)
 
 
 @st.cache_data(ttl=TTL_SECONDS, show_spinner=False)
-def funnel(_api: ApiClient, start: str | None, end: str | None, window_days: int) -> dict:
-    return _get(_api, "/analytics/funnel", start=start, end=end, window_days=window_days)
+def funnel(
+    _api: ApiClient,
+    dataset_id: int,
+    user_id: str,
+    start: str | None,
+    end: str | None,
+    window_days: int,
+) -> dict:
+    return _get(
+        _api, "/analytics/funnel", dataset_id, start=start, end=end, window_days=window_days
+    )
 
 
 @st.cache_data(ttl=TTL_SECONDS, show_spinner=False)
-def retention(_api: ApiClient, periods: int) -> dict:
-    return _get(_api, "/analytics/retention", periods=periods)
+def retention(_api: ApiClient, dataset_id: int, user_id: str, periods: int) -> dict:
+    return _get(_api, "/analytics/retention", dataset_id, periods=periods)
 
 
 @st.cache_data(ttl=TTL_SECONDS, show_spinner=False)
-def engagement(_api: ApiClient, start: str | None, end: str | None) -> dict:
-    return _get(_api, "/analytics/engagement", start=start, end=end)
+def engagement(
+    _api: ApiClient, dataset_id: int, user_id: str, start: str | None, end: str | None
+) -> dict:
+    return _get(_api, "/analytics/engagement", dataset_id, start=start, end=end)
 
 
 @st.cache_data(ttl=TTL_SECONDS, show_spinner=False)
-def at_risk(_api: ApiClient, limit: int, offset: int, sort: str = "risk_desc") -> dict:
-    return _get(_api, "/churn/at-risk", limit=limit, offset=offset, sort=sort)
+def at_risk(
+    _api: ApiClient, dataset_id: int, user_id: str, limit: int, offset: int, sort: str = "risk_desc"
+) -> dict:
+    return _get(_api, "/churn/at-risk", dataset_id, limit=limit, offset=offset, sort=sort)

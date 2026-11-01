@@ -16,10 +16,11 @@ def churn_script():
     import streamlit as st
 
     from api_client import ApiClient
+    from tests.fake_api import context_for
     from views import churn
 
     st.info("Demo data: synthetic events from a seeded generator, not real customers.")
-    churn.render(ApiClient("http://api.test", lambda: "AT"))
+    churn.render(ApiClient("http://api.test", lambda: "AT"), context_for())
 
 
 def churn_app(monkeypatch, status=200, body=AT_RISK_OK):
@@ -127,7 +128,12 @@ def test_churn_table_columns_and_rows(monkeypatch):
     assert frame["rank"].tolist() == [1, 2, 3]
     assert frame["predicted class"].tolist() == ["At risk", "At risk", "Not at risk"]
     assert frame["risk score (relative)"].tolist() == [0.93, 0.88, 0.41]
-    assert calls(requested)[-1] == {"limit": 50, "offset": 0, "sort": "risk_desc"}
+    assert calls(requested)[-1] == {
+        "dataset_id": 1,
+        "limit": 50,
+        "offset": 0,
+        "sort": "risk_desc",
+    }
 
 
 def test_churn_table_rank_is_integer_and_score_is_float(monkeypatch):
@@ -166,7 +172,12 @@ def test_churn_page_two_requests_offset_50(monkeypatch):
     run(at)
     at.number_input[0].set_value(2)
     run(at)
-    assert calls(requested)[-1] == {"limit": 50, "offset": 50, "sort": "risk_desc"}
+    assert calls(requested)[-1] == {
+        "dataset_id": 1,
+        "limit": 50,
+        "offset": 50,
+        "sort": "risk_desc",
+    }
 
 
 SORT_LABELS = ["Highest risk first", "Lowest risk first", "Customer ID (A-Z)"]
@@ -188,10 +199,15 @@ def test_churn_sort_choice_reaches_the_request(monkeypatch):
     run(at)
     at.selectbox[0].select("risk_asc")
     run(at)
-    assert calls(requested)[-1] == {"limit": 50, "offset": 0, "sort": "risk_asc"}
+    assert calls(requested)[-1] == {"dataset_id": 1, "limit": 50, "offset": 0, "sort": "risk_asc"}
     at.selectbox[0].select("customer_asc")
     run(at)
-    assert calls(requested)[-1] == {"limit": 50, "offset": 0, "sort": "customer_asc"}
+    assert calls(requested)[-1] == {
+        "dataset_id": 1,
+        "limit": 50,
+        "offset": 0,
+        "sort": "customer_asc",
+    }
 
 
 def test_churn_changing_sort_on_page_two_resets_to_page_one(monkeypatch):
@@ -199,10 +215,15 @@ def test_churn_changing_sort_on_page_two_resets_to_page_one(monkeypatch):
     run(at)
     at.number_input[0].set_value(2)
     run(at)
-    assert calls(requested)[-1] == {"limit": 50, "offset": 50, "sort": "risk_desc"}
+    assert calls(requested)[-1] == {
+        "dataset_id": 1,
+        "limit": 50,
+        "offset": 50,
+        "sort": "risk_desc",
+    }
     at.selectbox[0].select("risk_asc")
     run(at)
-    assert calls(requested)[-1] == {"limit": 50, "offset": 0, "sort": "risk_asc"}
+    assert calls(requested)[-1] == {"dataset_id": 1, "limit": 50, "offset": 0, "sort": "risk_asc"}
     assert at.number_input[0].value == 1
 
 
@@ -213,7 +234,12 @@ def test_churn_paging_keeps_the_chosen_sort(monkeypatch):
     run(at)
     at.number_input[0].set_value(2)
     run(at)
-    assert calls(requested)[-1] == {"limit": 50, "offset": 50, "sort": "customer_asc"}
+    assert calls(requested)[-1] == {
+        "dataset_id": 1,
+        "limit": 50,
+        "offset": 50,
+        "sort": "customer_asc",
+    }
 
 
 def test_churn_page_beyond_end_does_not_crash(monkeypatch):

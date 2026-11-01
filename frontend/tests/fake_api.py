@@ -87,7 +87,54 @@ class Requested(list):
         self.queries: list[dict[str, str]] = []
 
 
-def install(monkeypatch, routes: dict[str, tuple[int, dict | None]]) -> Requested:
+ALL_CAPABILITIES = {
+    "overview": True,
+    "engagement": True,
+    "retention": True,
+    "funnel": True,
+    "churn": True,
+    "funnel_missing": [],
+}
+
+
+def dataset_row(dataset_id=1, kind="demo", name="Demo data", signup_rule="event", **capabilities):
+    return {
+        "id": dataset_id,
+        "kind": kind,
+        "name": name,
+        "source_filename": None if kind == "demo" else name,
+        "signup_rule": signup_rule,
+        "customer_count": 100,
+        "event_count": 1000,
+        "data_through": "2026-10-30T18:00:00Z",
+        "created_at": "2026-10-01T00:00:00Z",
+        "capabilities": ALL_CAPABILITIES | capabilities,
+        "scoring_method": "logistic" if kind == "demo" else None,
+    }
+
+
+DEMO_ROW = dataset_row()
+UPLOAD_ROW = dataset_row(7, "upload", "events.csv", churn=False)
+DATASETS_DEMO_ONLY = (200, [DEMO_ROW])
+DATASETS_WITH_UPLOAD = (200, [DEMO_ROW, UPLOAD_ROW])
+
+
+def context_for(row=None, user_id=ME_OK["id"]):
+    from dataset import Context
+
+    row = row or DEMO_ROW
+    return Context(
+        dataset_id=row["id"],
+        user_id=user_id,
+        kind=row["kind"],
+        name=row["name"],
+        signup_rule=row["signup_rule"],
+        capabilities=row["capabilities"],
+        scoring_method=row["scoring_method"],
+    )
+
+
+def install(monkeypatch, routes: dict[str, tuple[int, dict | list | None]]) -> Requested:
     requested = Requested()
 
     def fake_request(self, method, url, **kwargs):
@@ -105,10 +152,11 @@ def install(monkeypatch, routes: dict[str, tuple[int, dict | None]]) -> Requeste
     return requested
 
 
-def signed_in_app(monkeypatch, routes: dict[str, tuple[int, dict | None]]):
+def signed_in_app(monkeypatch, routes: dict[str, tuple[int, dict | list | None]]):
     """A configured app whose session already holds valid tokens, plus the requested paths."""
     for key, value in CONFIGURED.items():
         monkeypatch.setenv(key, value)
+    routes.setdefault("/datasets", DATASETS_DEMO_ONLY)
     requested = install(monkeypatch, routes)
     at = AppTest.from_file(APP, default_timeout=30)
     at.session_state["tokens"] = Tokens("AT", "RT", time.time() + 3600)
