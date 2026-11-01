@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.authorization import current_user
+from app.db.datasets import DEMO_DATASET_ID
 from app.db.session import get_session
 from app.schemas.analytics import EngagementOut, FunnelOut, OverviewOut, RetentionOut
 from app.services import analytics
@@ -31,7 +32,7 @@ def _utc(name: str, value: datetime | None) -> pd.Timestamp | None:
 @router.get("/overview", response_model=OverviewOut)
 def overview(session: SessionDep, start: Start = None, end: End = None) -> OverviewOut:
     try:
-        return analytics.overview(session, _utc("start", start), _utc("end", end))
+        return analytics.overview(session, DEMO_DATASET_ID, _utc("start", start), _utc("end", end))
     except analytics.InvalidRange as exc:
         raise HTTPException(422, str(exc)) from exc
 
@@ -44,19 +45,23 @@ def funnel(
     window_days: Annotated[int, Query(ge=1, le=90)] = 14,
 ) -> FunnelOut:
     try:
-        return analytics.funnel_report(session, _utc("start", start), _utc("end", end), window_days)
+        return analytics.funnel_report(
+            session, DEMO_DATASET_ID, _utc("start", start), _utc("end", end), window_days
+        )
     except analytics.InvalidRange as exc:
         raise HTTPException(422, str(exc)) from exc
 
 
 @router.get("/retention", response_model=RetentionOut)
 def retention(session: SessionDep, periods: Annotated[int, Query(ge=1, le=26)] = 8) -> RetentionOut:
-    return analytics.retention_report(session, periods)
+    return analytics.retention_report(session, DEMO_DATASET_ID, periods)
 
 
 @router.get("/engagement", response_model=EngagementOut)
 def engagement(session: SessionDep, start: Start = None, end: End = None) -> EngagementOut:
     try:
-        return analytics.engagement_report(session, _utc("start", start), _utc("end", end))
+        return analytics.engagement_report(
+            session, DEMO_DATASET_ID, _utc("start", start), _utc("end", end)
+        )
     except analytics.InvalidRange as exc:
         raise HTTPException(422, str(exc)) from exc

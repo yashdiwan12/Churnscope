@@ -6,6 +6,7 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.db import repositories
+from app.db.datasets import DEMO_DATASET_ID
 from app.ml.artifact import ModelBundle
 from app.schemas.churn import (
     AtRiskOut,
@@ -35,7 +36,7 @@ def default_cutoff(session: Session) -> pd.Timestamp | None:
     would count the unobserved rest of the latest day as inactivity and inflate
     ``days_since_last_activity``, so the partial latest day is left out instead.
     """
-    through = repositories.data_through(session)
+    through = repositories.data_through(session, DEMO_DATASET_ID)
     return None if through is None else through.floor("D")
 
 
@@ -61,11 +62,13 @@ def predict(
 ) -> PredictResponse:
     cutoff = cutoff if cutoff is not None else default_cutoff(session)
     unique_ids = list(dict.fromkeys(customer_ids))  # drop repeats, keep request order
-    known = repositories.resolve_customers(session, unique_ids)
+    known = repositories.resolve_customers(session, DEMO_DATASET_ID, unique_ids)
 
     scores: dict[int, float] = {}
     if known and cutoff is not None:  # cutoff is None only when no events exist at all
-        events = repositories.load_events(session, until=cutoff, customer_ids=list(known.values()))
+        events = repositories.load_events(
+            session, DEMO_DATASET_ID, until=cutoff, customer_ids=list(known.values())
+        )
         scores = _score_frame(bundle, events, cutoff).to_dict()
 
     results = []
@@ -129,11 +132,13 @@ def score_all(session: Session, bundle: ModelBundle, cutoff: pd.Timestamp) -> pd
     empty = pd.DataFrame(
         {"customer_id": pd.Series(dtype=str), "risk_score": pd.Series(dtype=float)}
     )
-    raw = _score_frame(bundle, repositories.load_events(session, until=cutoff), cutoff)
+    raw = _score_frame(
+        bundle, repositories.load_events(session, DEMO_DATASET_ID, until=cutoff), cutoff
+    )
     if raw.empty:
         return empty
     pks = [int(p) for p in raw.index]
-    names = repositories.customer_external_ids(session, pks)
+    names = repositories.customer_external_ids(session, DEMO_DATASET_ID, pks)
     frame = pd.DataFrame(
         {"customer_id": [names[p] for p in pks], "risk_score": [round(float(v), 4) for v in raw]}
     )
@@ -144,7 +149,7 @@ def score_all(session: Session, bundle: ModelBundle, cutoff: pd.Timestamp) -> pd
 
 def _scored(session: Session, bundle: ModelBundle, cutoff: pd.Timestamp) -> pd.DataFrame:
     global _cache
-    key = (bundle.version, cutoff, repositories.latest_event_id(session))
+    key = (bundle.version, cutoff, repositories.latest_event_id(session, DEMO_DATASET_ID))
     with _cache_lock:
         if _cache is not None and _cache[0] == key:
             return _cache[1]
@@ -222,7 +227,7 @@ def at_risk(
     return AtRiskOut(
         model_version=bundle.version,
         cutoff=cutoff,
-        data_through=repositories.data_through(session),
+        data_through=repositories.data_through(session, DEMO_DATASET_ID),
         window_days=features.WINDOW_DAYS,
         horizon_days=features.HORIZON_DAYS,
         decision_threshold=bundle.threshold,

@@ -72,13 +72,31 @@ def engine():
     eng.dispose()
 
 
+def _reset_data(conn) -> None:
+    """Empty every table, then restore the demo dataset row exactly as migration 0003 makes it.
+
+    Truncating ``user_profiles`` cascades to ``datasets``, so row 1 is re-inserted and the id
+    sequence is set back so that the next generated id is 2, never 1 again.
+    """
+    conn.execute(
+        text(
+            "TRUNCATE events, customers, saved_reports, user_profiles, datasets "
+            "RESTART IDENTITY CASCADE"
+        )
+    )
+    conn.execute(
+        text(
+            "INSERT INTO datasets (id, owner_id, kind, name, signup_rule, mapping, mapped_counts, "
+            "customer_count, event_count) OVERRIDING SYSTEM VALUE "
+            "VALUES (1, NULL, 'demo', 'Demo data (synthetic)', 'event', '{}', '{}', 0, 0)"
+        )
+    )
+    conn.execute(text("SELECT setval(pg_get_serial_sequence('datasets', 'id'), 1)"))
+
+
 @pytest.fixture
 def session(engine):
     with Session(engine) as s:
         yield s
     with engine.begin() as conn:
-        conn.execute(
-            text(
-                "TRUNCATE events, customers, saved_reports, user_profiles RESTART IDENTITY CASCADE"
-            )
-        )
+        _reset_data(conn)

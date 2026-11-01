@@ -11,6 +11,7 @@ from sqlalchemy import text
 TABLES = [
     "alembic_version",
     "customers",
+    "datasets",
     "events",
     "predictions",
     "saved_reports",
@@ -40,7 +41,9 @@ def test_a_non_owner_role_sees_nothing_even_with_select_granted(engine, session)
         conn.execute(text("GRANT SELECT, INSERT ON customers, events TO rls_probe"))
         conn.execute(text("GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO rls_probe"))
         conn.execute(
-            text("INSERT INTO customers (external_customer_id, created_at) VALUES ('rls-c', now())")
+            text(
+                "INSERT INTO customers (dataset_id, external_customer_id, created_at) VALUES (1, 'rls-c', now())"
+            )
         )
     try:
         with engine.connect() as conn:
@@ -50,7 +53,7 @@ def test_a_non_owner_role_sees_nothing_even_with_select_granted(engine, session)
             with pytest.raises(Exception, match="row-level security"):
                 conn.execute(
                     text(
-                        "INSERT INTO customers (external_customer_id, created_at) VALUES ('x', now())"
+                        "INSERT INTO customers (dataset_id, external_customer_id, created_at) VALUES (1, 'x', now())"
                     )
                 )
             trans.rollback()

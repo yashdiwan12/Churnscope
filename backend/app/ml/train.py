@@ -231,10 +231,11 @@ def _load_events(source: str, csv_dir: Path) -> pd.DataFrame:
     from sqlalchemy.orm import Session
 
     from app.db import repositories
+    from app.db.datasets import DEMO_DATASET_ID
     from app.db.session import get_engine
 
     with Session(get_engine()) as session:
-        return repositories.load_events(session)
+        return repositories.load_events(session, DEMO_DATASET_ID)
 
 
 def main() -> None:

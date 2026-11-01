@@ -210,7 +210,11 @@ def test_known_customer_without_any_events_is_not_eligible_not_unknown(session):
 
     from app.db.models import Customer
 
-    session.add(Customer(external_customer_id="A", created_at=datetime(2026, 1, 1, tzinfo=UTC)))
+    session.add(
+        Customer(
+            dataset_id=1, external_customer_id="A", created_at=datetime(2026, 1, 1, tzinfo=UTC)
+        )
+    )
     session.commit()
     body = (
         make_client(session, stub_bundle())
