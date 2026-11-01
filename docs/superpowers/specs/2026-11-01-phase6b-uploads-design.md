@@ -1,6 +1,6 @@
 # Phase 6b — Bring your own data (uploads): design
 
-Status: **draft for review (revised after external review; churn scoring changed to per-upload backtesting)** · Date: 2026-11-01 · Phase: 6b · Path: architectural (new `datasets` table, migration, dataset-scoped queries and caches, upload endpoints, new UI step)
+Status: **approved 2026-11-01** (revised after external review; churn scoring changed to per-upload backtesting; trial run passed) · Date: 2026-11-01 · Phase: 6b · Path: architectural (new `datasets` table, migration, dataset-scoped queries and caches, upload endpoints, new UI step)
 
 ## 1. Goal and understanding
 
@@ -27,7 +27,7 @@ Not in scope: using the shipped synthetic-data model on uploads, a user-chosen c
 | D4 | Two calls: **check** (stores nothing) then **import** (with mapping). Both carry the file as a **multipart upload**, not JSON | Server stays stateless and never trusts browser parsing; JSON escaping can inflate a 5 MB file past the body cap and FastAPI's default 422 echoes the offending input |
 | D5 | Replace = **one transaction** that deletes the user's old dataset and inserts the new one, serialised by one global `pg_advisory_xact_lock` (transaction-scoped, so it is safe behind Supabase's transaction-mode pooler) | A failed import keeps the old data; the same lock also makes the global-cap check and the insert one atomic step. Imports queue, which is fine at this user count. A repeated replace is harmless, so Retry after a client timeout is safe |
 | D6 | "First event counts as signup" **derives a `signup` event** per customer lacking one, at their first mapped event's time (`properties.derived = true`), only when no event is mapped to `signup` | Retention, funnel and churn features all need `signup` (features drop customers without one); no metric code changes |
-| D6a | **Left-censoring guard for the derived rule.** A customer who really joined before the file starts gets a derived signup at the file's start, which inflates the first cohort, "new users" and makes `account_age_days` mean "days since the file began". Fix chosen: the check step computes the share of customers whose first event falls in the file's first 7 days; **at 50% or more it shows a red warning and the user must tick "I understand signup dates are approximate"** before the import button works. Afterwards, Overview (new users), Retention (first cohort) and Churn Risk (account age is unreliable) each carry a fixed note saying so. Excluding the first-week cohort from the heatmap is deferred | Stops the silent misreading without changing metric code |
+| D6a | **Left-censoring guard for the derived rule.** A customer who really joined before the file starts gets a derived signup at the file's start, which inflates the first cohort, "new users" and makes `account_age_days` mean "days since the file began". Fix chosen: the check step computes the share of customers whose first event falls in the file's first 7 days; **at 25% or more it shows a red warning and the user must tick "I understand signup dates are approximate"** before the import button works. Afterwards, Overview (new users), Retention (first cohort) and Churn Risk (account age is unreliable) each carry a fixed note saying so. Excluding the first-week cohort from the heatmap is deferred. The threshold was 50% until the trial run: a 10-week slice of the demo data had 45% of customers starting in its first week (about 10% expected if arrivals were even) and the warning stayed silent | Stops the silent misreading without changing metric code |
 | D7 | Existing analytics and churn routes gain an optional `dataset_id` query parameter, default demo (1) | Backward compatible |
 | D9 | **Churn scoring on an upload is learned from the file itself** (section 5a): weekly cutoffs, features from the 28 days before each, labels from the 14 days after, time-based train/test split with a purge gap, logistic regression against the days-since-last-activity rule on the same test; the better one scores today's customers. The demo dataset keeps the shipped model | The score is measured on the user's own data instead of borrowed from synthetic data; almost all code already exists (`features.make_cutoffs`, `build_features`, `build_labels`, `split_by_cutoff`, `train.make_logistic`, `evaluate.baseline_metrics`) |
 | D10 | The fitted model is stored as **plain numbers in JSON** (feature names, scaler means and scales, coefficients, intercept, threshold) on the dataset row, never as a pickle | Loading it cannot run code; deleting the dataset deletes it; inference is a dot product |
@@ -87,6 +87,8 @@ Floors (constants), checked in order:
 Roughly 9 weeks of history are needed for a checked result (28-day window, 14-day horizon, a train cutoff, a 14-day purge gap and 2 test weeks). The page always shows the counts behind any number. "Churn" here means inactivity for 14 days, not cancellation, and the page says so.
 
 Training time is part of the budget: the plan's scoring task measures it on a 50,000-event, 10,000-customer file and keeps it under 20 s, reducing the cutoff count if needed.
+
+**Trial run (2026-11-01, local, throwaway script).** The steps above ran on five versions of the demo file. Full file (180 days, 2,000 customers): checked, rule won (PR-AUC 0.821 vs 0.820), 1.4 s. Last 10 weeks with derived signup: checked, rule won (0.809 vs 0.796), 0.4 s. Last 6 weeks: no split possible, `rule_unchecked`. 150 customers: floors not met (135 test rows), `rule_unchecked`. Five copies (10,000 customers, 214,235 events): 2.7 s. Every run passed the leakage check (train horizons close before the first test cutoff); the JSON model matched scikit-learn exactly; the stored model is about 1.3 KB. On this data the rule always wins because the generator's churn is inactivity itself.
 
 ## 6. Flow
 
@@ -153,7 +155,7 @@ Invalid CSV, missing columns and over-limit files return fixed 4xx messages with
 - Derived signup (retention, funnel and features all see it).
 - `event_id` derivation and duplicates, including importing the same file twice in a row (identical counts).
 - Delete and replace empty both caches; a deleted dataset id is never served from cache.
-- The left-censoring warning at 50% and just below, and the acknowledgement gate.
+- The left-censoring warning at 25% and just below, and the acknowledgement gate.
 - The 5% rule with ignored and duplicate rows excluded from the denominator.
 - `ingestion.py` conflict handling is per dataset (the same `event_id` in two datasets both import).
 - The 422 handler never echoes the file.
@@ -161,7 +163,7 @@ Invalid CSV, missing columns and over-limit files return fixed 4xx messages with
 - Capabilities for several mapping shapes.
 - Hand-checked metrics on a small uploaded file equal the same events loaded as demo.
 - Frontend: selector, banner, notices, 404 fallback.
-- Scoring: on a hand-built file where the churners are the customers who go quiet, both methods rank them first; the purge gap leaves no training label inside the test period; the 0.02 margin picks the rule on a tie and the model on a clear win; each floor at and just below its limit gives the right method; the JSON model's probabilities equal scikit-learn's to 1e-9; a scoring failure leaves the dataset intact and Retry works; the synthetic model's metrics never appear for an upload; the rule view shows days, not a probability.
+- Scoring: on a hand-built file where the churners are the customers who go quiet, both methods rank them first; a second hand-built file where churn depends on something other than recency (so the model must beat the rule by more than the margin) proves the model-wins path, which the synthetic demo data never exercises; the purge gap leaves no training label inside the test period; the 0.02 margin picks the rule on a tie and the model on a clear win; each floor at and just below its limit gives the right method; the JSON model's probabilities equal scikit-learn's to 1e-9; a scoring failure leaves the dataset intact and Retry works; the synthetic model's metrics never appear for an upload; the rule view shows days, not a probability.
 
 ## 11. Plan outline (for the plan document)
 
