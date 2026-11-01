@@ -498,3 +498,35 @@ def test_max_upload_size_config():
 def test_upload_page_is_registered():
     source = (Path(__file__).resolve().parent.parent / "app.py").read_text(encoding="utf-8")
     assert '(upload, "Upload data", "upload")' in source
+
+
+NO_ROWS = CHECK_OK | {
+    "valid_rows": 0,
+    "customers": 0,
+    "first_event": None,
+    "last_event": None,
+    "event_names": [],
+    "suggested_mapping": {},
+    "skipped_count": 2,
+}
+NO_ROWS_MESSAGE = "No usable rows in this file. Fix the rows listed below and check the file again."
+
+
+def test_preview_without_dates_reports_no_usable_events():
+    result = upload.preview({}, True, NO_ROWS)
+    assert result["Churn Risk"] == upload.CHURN_NO_EVENTS
+    assert upload._history_days(NO_ROWS) is None
+
+
+@pytest.mark.parametrize("derive", [False, True])
+def test_file_with_no_usable_rows_renders_message_and_disabled_import(monkeypatch, derive):
+    at, _ = checked(monkeypatch, NO_ROWS)
+    assert not at.exception
+    if derive:  # the option is not offered, so it cannot be ticked
+        assert not [c for c in at.checkbox if c.label == DERIVE]
+    shown = texts(at)
+    assert NO_ROWS_MESSAGE in shown
+    assert "row 5: the timestamp could not be read" in shown
+    assert "row 9: the customer ID is empty" in shown
+    assert not any(s.label.startswith("Map ") for s in at.selectbox)
+    assert button(at, "Import").disabled

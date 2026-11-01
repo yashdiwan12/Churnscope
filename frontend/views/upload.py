@@ -75,9 +75,11 @@ SKIP_REASONS = {
 }
 GENERIC_SKIP = "the row could not be used"
 PAGE_ORDER = ["Overview", "Funnel", "Retention", "Engagement", "Churn Risk"]
+NO_USABLE_ROWS = "No usable rows in this file. Fix the rows listed below and check the file again."
 CHURN_MIN_DAYS = 28
 CHURN_NO_SIGNUP = "needs a signup event, or the first-event option"
 CHURN_SHORT = "needs at least 28 days of history"
+CHURN_NO_EVENTS = "no usable events in this file"
 CHURN_OK = "will work; results are checked on your own history from about 9 weeks"
 
 
@@ -95,7 +97,10 @@ def _join(items: list[str]) -> str:
     return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} and {items[-1]}"
 
 
-def _history_days(check: dict) -> int:
+def _history_days(check: dict) -> int | None:
+    """Days between the first and last valid event, or None when the file has no valid event."""
+    if not check["valid_rows"] or not check["first_event"] or not check["last_event"]:
+        return None
     first, last = str(check["first_event"])[:10], str(check["last_event"])[:10]
     return (date.fromisoformat(last) - date.fromisoformat(first)).days
 
@@ -104,7 +109,10 @@ def _churn(mapped: set, check: dict) -> str:
     """Churn needs a signup (as Retention does) and at least 28 days of history."""
     if "signup" not in mapped:
         return CHURN_NO_SIGNUP
-    if _history_days(check) < CHURN_MIN_DAYS:
+    days = _history_days(check)
+    if days is None:
+        return CHURN_NO_EVENTS
+    if days < CHURN_MIN_DAYS:
         return CHURN_SHORT
     return CHURN_OK
 
@@ -222,6 +230,13 @@ def _mapping_form(check: dict, n: int) -> dict:
 def _checked_section(api: ApiClient, ctx: Context, state: dict) -> None:
     check = state["result"]
     st.subheader("Check result")
+    if not check["valid_rows"]:
+        st.write(f"0 of {check['total_rows']} rows are valid.")
+        st.caption(NO_USABLE_ROWS)
+        for skip in check["skipped"]:
+            st.caption(_skip_line(skip))
+        st.button("Import", disabled=True)
+        return
     st.write(
         f"{check['valid_rows']} of {check['total_rows']} rows are valid, from "
         f"{check['customers']} customers, between {str(check['first_event'])[:10]} and "
