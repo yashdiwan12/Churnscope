@@ -163,3 +163,15 @@ def test_no_file_value_in_any_message(caplog):
         assert s not in str(err)
     assert s not in caplog.text
     assert all(s not in r.getMessage() for r in caplog.records)
+
+
+def test_row_with_one_extra_field_is_rejected_not_shifted():
+    err = rejected(HEAD.encode() + f"SECRET-123,u1,login,{OK_TS}\n".encode())
+    assert err.code == "missing_columns"
+    assert "SECRET-123" not in err.message
+
+
+def test_duplicate_required_header_is_rejected():
+    err = rejected(f"customer_id, Customer_ID,event_name,event_timestamp\nu,v,x,{OK_TS}\n".encode())
+    assert err.code == "missing_columns"
+    assert err.status == 422

@@ -7,6 +7,7 @@ the uploaded file. Problems are reported as codes and 1-based data row numbers o
 import io
 import logging
 import re
+import warnings
 from dataclasses import dataclass, field
 
 import pandas as pd
@@ -84,17 +85,23 @@ def parse_csv(raw: bytes, now: pd.Timestamp) -> ParsedFile:
     except UnicodeDecodeError:
         raise UploadRejected("not_utf8", "The file must be UTF-8 text.") from None
     try:
-        df = pd.read_csv(
-            io.BytesIO(raw),
-            dtype=str,
-            keep_default_na=False,
-            encoding="utf-8-sig",
-            skip_blank_lines=False,
-        )
+        with warnings.catch_warnings():
+            # A row longer than the header is a ParserWarning with index_col=False; refuse it
+            # instead of silently dropping or shifting fields.
+            warnings.simplefilter("error", pd.errors.ParserWarning)
+            df = pd.read_csv(
+                io.BytesIO(raw),
+                dtype=str,
+                keep_default_na=False,
+                encoding="utf-8-sig",
+                skip_blank_lines=False,
+                index_col=False,
+            )
     except pd.errors.EmptyDataError:
         raise UploadRejected("empty_file", "The file is empty.") from None
     except (
         pd.errors.ParserError,
+        pd.errors.ParserWarning,
         ValueError,
         OverflowError,
     ):  # pandas messages can quote file content, so none is passed on
@@ -102,6 +109,8 @@ def parse_csv(raw: bytes, now: pd.Timestamp) -> ParsedFile:
             "missing_columns", "The file is not a well-formed CSV with a header row."
         ) from None
     df.columns = [str(c).strip().lower() for c in df.columns]
+    if any(list(df.columns).count(c) > 1 for c in REQUIRED_COLUMNS + ("event_id",)):
+        raise UploadRejected("missing_columns", "A column name appears more than once.")
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
     if missing:
         raise UploadRejected(

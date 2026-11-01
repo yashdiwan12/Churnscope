@@ -93,7 +93,7 @@ def test_check_413_over_limit(client):
     assert big.json()["detail"]["code"] == "file_too_large"
 
 
-def test_check_422_never_echoes_input(client, caplog):
+def test_check_missing_file_part_never_echoes_input(client, caplog):
     caplog.set_level(logging.DEBUG)
     r = client.post("/datasets/check", data={"file": "SECRET-123"})
     assert r.status_code == 422
@@ -125,3 +125,29 @@ def test_censor_warning_at_threshold(client):
     below = post(client, row_share(24, 100)).json()
     assert below["first_week_share"] == 0.24
     assert below["censor_warning"] is False
+
+
+def test_datasets_validation_errors_carry_only_loc_and_msg(session):
+    app = create_app()
+
+    @app.get("/datasets/_probe")
+    def probe(n: int):
+        return n
+
+    r = TestClient(app).get("/datasets/_probe", params={"n": "SECRET-123"})
+    assert r.status_code == 422
+    assert "SECRET-123" not in r.text
+    items = r.json()["detail"]
+    assert items and all(set(i) == {"loc", "msg"} for i in items)
+
+
+def test_other_routes_keep_default_validation_body(session):
+    app = create_app()
+
+    @app.get("/other/_probe")
+    def probe(n: int):
+        return n
+
+    r = TestClient(app).get("/other/_probe", params={"n": "abc"})
+    assert r.status_code == 422
+    assert all("input" in i for i in r.json()["detail"])
