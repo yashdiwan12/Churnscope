@@ -4,6 +4,10 @@ Status: **[Built]** in `backend/app/ml/`, `backend/app/services/features.py`, `b
 
 > **Everything here is measured on synthetic data.** The event log comes from a seeded generator in which customers stop being active after a random "churn week". Results show how well the pipeline recovers that behaviour, **not** how well it would predict real customers.
 
+## Scope: the shipped model is demo-only
+
+The model described below is trained on the synthetic demo data and is used **only for the demo dataset**. Uploaded data (Phase 6b) is never scored with it. An upload is scored by a method that is **trained and backtested on that file's own history**: weekly cutoffs, the same 28-day features and 14-day label as below, the latest 2 weekly cutoffs held out (with a 14-day purge gap), and a logistic regression compared with the days-since-last-activity rule (7 days or more) on the held-out rows. The model is used only if its PR-AUC beats the rule's by at least 0.02, otherwise the rule is used. If the file is too short for a fair test (floors: 200 test rows, 20 churners and 20 non-churners in the test, 20 churners in training) the page falls back to the rule marked "not checked on your data" (needs at least 28 days of history) or to nothing. A checked result needs roughly 9 weeks of history. The page shows the file's own numbers (test rows, churners, PR-AUC of model and rule), never the synthetic model's metrics. The fitted model is stored as JSON numbers, not a pickle. In a trial on slices of the demo data the rule won every time (PR-AUC 0.821 vs 0.820 on the full file), as expected because the generator's churn is inactivity itself. "Churn" for an upload means 14 days of inactivity, not cancellation, and a backtest on the recent past does not show the method will keep working. Design: [Phase 6b spec, section 5a](superpowers/specs/2026-11-01-phase6b-uploads-design.md).
+
 ## Summary
 
 | | |
@@ -12,7 +16,7 @@ Status: **[Built]** in `backend/app/ml/`, `backend/app/services/features.py`, `b
 | Shipped model | `churn-lr-e330fa34d3`: Logistic Regression (class-balanced) on 15 standardised behavioural features |
 | Test result | ROC-AUC **0.879**, precision 0.750, recall 0.741, F1 0.746 at threshold 0.5 (churn rate in test: 34.5%) |
 | Honest headline | It beats "always predict no churn" clearly, but it **does not clearly beat a one-line rule** ("last active 7 or more days ago"): F1 0.746 vs 0.742, ROC-AUC 0.879 vs 0.881 (the rule is slightly ahead on ROC-AUC) |
-| Served by | `POST /churn/predict` and `GET /churn/at-risk` (the ranked list behind the dashboard's Churn Risk page; both require a signed-in, allow-listed user) |
+| Served by | (demo data only) `POST /churn/predict` and `GET /churn/at-risk` (the ranked list behind the dashboard's Churn Risk page; both require a signed-in, allow-listed user) |
 
 ## Label and population
 

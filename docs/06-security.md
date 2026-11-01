@@ -63,9 +63,27 @@ Supabase project hardening (done by hand): Google provider on with a Testing-mod
 - Error messages shown to users are fixed strings; Streamlit's error details, toolbar and footer are hidden (`frontend/.streamlit/config.toml`, read only when launched from `frontend/`). Tokens are never rendered.
 - The sign-in link is a same-tab anchor to the Supabase authorize URL (PKCE).
 - Query parameters (`sort`, `limit`, `offset`, dates) are validated by the API; the UI cannot send a range over 366 days.
-- The 5-minute result cache is shared across users and is safe only while analytics data is shared (synthetic demo). Phase 6b must key it by dataset and user.
+- The 5-minute result cache is keyed by dataset id and signed-in user id (Phase 6b), so it is safe once data is private; see 6.4b.
 
 Known limitations: the Streamlit session is lost on browser reload; the PKCE verifier store is per process; the allow-list is an environment variable (a change needs a restart).
+
+## 6.4b Uploaded data `[Built]` (Phase 6b)
+
+Users can upload their own events. The file may hold real customer identifiers, so it is treated as private to its owner.
+
+**Ownership.** `db/datasets.py` is the one place that decides visibility: a dataset is visible if it is the demo (id 1) or the caller owns it. Every `?dataset_id=` route, `DELETE /datasets/{id}` and `POST /datasets/{id}/score` use it. A missing id, someone else's id, or (for delete and score) the demo is **404 `Dataset not found`**, never 403, so ids do not leak existence. At most one upload per user (partial unique index), and `POST /events` and the loader write to dataset 1 only. A composite foreign key stops an event from pointing at another dataset's customer.
+
+**Privacy.**
+- No value from a file reaches a log or an error body. Skip reasons are a row number and a code. Database failures during an import or scoring are logged by exception type only (the exception text carries SQL parameters, which are file values) and the traceback chain is dropped.
+- The `/datasets` routes have their own 422 handler (`main.py`) that returns only the field path and message, never the offending input, because FastAPI's default 422 echoes it. Other routes keep the default handler.
+- Only `customer_id`, `event_name`, `event_timestamp` and `event_id` are stored; other columns are ignored. The original file is not kept, only a cleaned file name.
+- Delete is real: customers and events cascade, the scoring JSON goes with the row, and the backend evicts that dataset's churn-cache entries (scored rows hold customer ids). The acting browser session also clears its result cache, and the selector re-checks `GET /datasets` on every rerun, so a deleted dataset is never served from the cache of another session. There is no automatic expiry yet: the notice tells the user the file is kept until deleted, and the operator can run `scripts/purge_uploads.py` ([runbook](08-operations-runbook.md)).
+
+**Limits.** Request body 5.5 MB (411 without Content-Length, 413 over; checked before parsing) and file part 5 MB, read in chunks; the Streamlit uploader refuses over 5 MB in the browser (`maxUploadSize`); at most 50,000 event rows, 10,000 customers, 50 distinct event names, 100 characters per id or name, 5 form fields; the whole file is rejected if more than 5% of counted rows are invalid; a global cap of 300,000 uploaded events returns 409 `storage_full`. The cap check, the delete of the old upload and the insert share one transaction-scoped advisory lock, so two imports cannot both pass the cap and a failed import keeps the old data. The check endpoint has no rate limit beyond these caps and the allow-list (revisit in Phase 7).
+
+**Stored models are JSON, not pickles.** An upload's fitted model is plain numbers (feature names, scaler means and scales, coefficients, intercept) applied as a dot product, so reading it can never run code. The shipped demo model remains a joblib pickle, guarded by its hash (see the [model card](model_card.md)).
+
+**Caches.** The frontend result cache keys on dataset and user; the backend churn cache keys on dataset (demo: also model version, cutoff and newest event id; upload: scoring fitted-at) and holds at most 4 entries.
 
 ## 6.5 Security checklist (Phase 7 gate)
 

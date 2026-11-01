@@ -29,6 +29,12 @@ Steps: `signup -> onboarding_complete -> report_created` (the "first key action"
 - **Eligibility (censoring):** only customers whose full window has elapsed at `as_of` are counted, so recent signups do not look like drop-offs.
 - **Rates:** `conversion_from_previous = reached N / reached N-1`; `conversion_from_start = reached N / eligible`. NaN when the denominator is 0.
 
+## Uploaded data: derived signup `[Built]` (Phase 6b)
+
+Funnel, retention, new/returning users and churn features all need a `signup` event. A file with no event mapped to `signup` can instead use **"first event counts as signup"**: each customer gets a derived `signup` event at the time of their first mapped event (`properties.derived = true`), and the dataset's `signup_rule` is `derived_from_first_event`. It is allowed only when nothing maps to `signup`.
+
+**Approximate-signup warning.** A customer who really joined before the file starts gets a derived signup at the file's start, which inflates the first cohort and "new users" and makes `account_age_days` mean "days since the file began". The check step computes the share of customers whose first event is in the file's first 7 days. At **25% or more** it shows a red warning and the import button stays disabled until the user ticks "I understand signup dates are approximate" (the server enforces this too). Afterwards Overview (new users), Retention (first cohort) and Churn Risk (account age) carry a fixed note. The threshold was 50% until a trial run: a 10-week slice of the demo data had 45% of customers starting in its first week (about 10% expected with even arrivals) and the warning stayed silent.
+
 ## Cohort retention
 
 - **Cohort:** UTC calendar week (Monday start) of the customer's `signup`.
@@ -58,7 +64,7 @@ Windows are `[start, end)`, tz-aware (naive timestamps -> 422), max 366 days; de
 | `GET /analytics/retention` | `periods` (1-26, default 8) | all signup-week cohorts; cells carry `eligible` and `complete` |
 | `GET /analytics/engagement` | `start`, `end` | see above |
 
-Empty data returns zeros / `null` rates, not errors. These endpoints require a signed-in, allow-listed user (Phase 5).
+Empty data returns zeros / `null` rates, not errors. These endpoints require a signed-in, allow-listed user (Phase 5). Since Phase 6b each takes an optional `dataset_id` (default 1, the demo); `data_through` and the right-censoring then refer to that dataset.
 
 ### Dashboard display rules (Phase 6)
 

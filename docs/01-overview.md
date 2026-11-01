@@ -1,7 +1,7 @@
 # 1. Overview
 
 > **Status legend** used across all docs: `[Planned]` designed, not built · `[In progress]` · `[Built]` implemented and tested.
-> Phases 0-6 are `[Built]` (setup, data and metric definitions, database and ingestion, analytics API, churn model and inference, Google sign-in and authorization, Streamlit dashboard). Uploads (Phase 6b), final quality pass and deployment (Phase 7) are `[Planned]`. Update tags as phases complete (see [History](10-project-history.md)).
+> Phases 0-6 are `[Built]` (setup, data and metric definitions, database and ingestion, analytics API, churn model and inference, Google sign-in and authorization, Streamlit dashboard). Phase 6b (uploads: your own CSV, private to you) is built on branch `phase-6b-uploads`, merge pending. The final quality pass and deployment (Phase 7) are `[Planned]`. Update tags as phases complete (see [History](10-project-history.md)).
 
 ## What Churnscope is
 

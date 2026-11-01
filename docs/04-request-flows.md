@@ -87,11 +87,11 @@ sequenceDiagram
     end
 ```
 
-Errors from a view's own fetch map to fixed messages (422 and other 4xx: invalid settings, 503 or timeout: service unavailable with Retry). The shared cache is safe only while analytics data is shared among users; Phase 6b must key it by dataset and user.
+Errors from a view's own fetch map to fixed messages (422 and other 4xx: invalid settings, 503 or timeout: service unavailable with Retry). Since Phase 6b the cache is keyed by dataset id and signed-in user id, and `dataset.py` re-checks `GET /datasets` on every rerun, so a deleted or foreign dataset is never read from it.
 
 ## 4.3 Event ingestion (idempotent) `[Built]`
 
-`POST /events` is protected by a service key (`X-API-Key`, compared in constant time; the route is closed with 503 unless `INGEST_API_KEY` is set) and capped at 5 MB and 5,000 events. `scripts/load_events.py` still calls the service directly. The response is `received / inserted / duplicates / conflicts / rejected`.
+`POST /events` always writes to dataset 1 (the demo) and is protected by a service key (`X-API-Key`, compared in constant time; the route is closed with 503 unless `INGEST_API_KEY` is set) and capped at 5 MB and 5,000 events. `scripts/load_events.py` still calls the service directly. The response is `received / inserted / duplicates / conflicts / rejected`.
 
 ```mermaid
 sequenceDiagram
@@ -105,7 +105,7 @@ sequenceDiagram
     R->>SV: raw events
     SV->>SV: validate each row, split valid and rejected
     SV->>DB: upsert customers (earliest created_at kept)
-    SV->>DB: INSERT events ON CONFLICT (event_id) DO NOTHING
+    SV->>DB: INSERT events ON CONFLICT (dataset_id, event_id) DO NOTHING
     alt database error
         DB-->>SV: error
         SV->>DB: ROLLBACK
@@ -147,7 +147,7 @@ If the artifact is missing or its feature schema mismatches: 503 with a generic 
 
 ## 4.4a Ranked at-risk list `[Built]` (Phase 6)
 
-`GET /churn/at-risk?limit&offset` scores every customer with qualifying activity in the 28 days before the serving cutoff with the same feature code as `/churn/predict`, ranks them (score descending, then customer id), and returns a page plus counts, a 10-bin histogram built from the rounded scores, and the model's own test metrics from the artifact metadata. The scored list is cached in-process keyed by `(model_version, cutoff, max(events.id))`: the event id always grows, so a late event with an old timestamp still triggers a rescore.
+`GET /churn/at-risk?limit&offset` scores every customer with qualifying activity in the 28 days before the serving cutoff with the same feature code as `/churn/predict`, ranks them (score descending, then customer id), and returns a page plus counts, a 10-bin histogram built from the rounded scores, and the model's own test metrics from the artifact metadata. The scored list is cached in-process keyed by `(dataset_id, model_version, cutoff, max(events.id))`: the event id always grows, so a late event with an old timestamp still triggers a rescore. With `?dataset_id=` for an upload the list is ranked by that upload's own stored scoring (4.5a), keyed by `(dataset_id, scoring fitted-at, cutoff)`; the cache holds at most 4 entries and a delete, import or re-score evicts that dataset's entries.
 
 ## 4.5 Offline model training (not a request) `[Built]`
 
@@ -161,6 +161,44 @@ flowchart TD
     ev --> wr["Write artifact + feature schema +<br/>metadata (version, data range, metrics, seed)"]
     wr --> mc["Update docs/model_card.md with real results"]
 ```
+
+## 4.5a Upload flow `[Built]` (Phase 6b)
+
+Four steps: check (stores nothing), map, import (one transaction), then scoring in a separate transaction after the commit. Both upload calls send the file as multipart, with the size limits enforced while the body is read (411 without Content-Length, 413 over 5.5 MB for the body or 5 MB for the file), before any parsing.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant UI as Streamlit Upload page
+    participant API as FastAPI
+    participant DB as PostgreSQL
+    U->>UI: choose CSV, accept the privacy notice
+    UI->>API: POST /datasets/check (file)
+    API->>API: read within limits, parse, count rows, names and first-week share
+    API-->>UI: event names with counts, suggested mapping, skipped rows, approximate-signup warning
+    U->>UI: adjust mapping, choose derive signup, tick the acknowledgement if warned
+    UI->>API: POST /datasets (file, mapping, flags)
+    API->>API: validate mapping, derive signup and event ids, apply the 5 percent invalid rule
+    API->>DB: BEGIN, take the global advisory lock
+    API->>DB: global cap check over other users' uploaded events
+    alt cap exceeded
+        API->>DB: ROLLBACK
+        API-->>UI: 409 storage_full
+    else room left
+        API->>DB: delete caller's old upload (cascade), insert dataset, customers, events in batches
+        API->>DB: COMMIT
+        API->>API: evict old and new dataset cache entries
+        Note over API,DB: import has committed, so the 201 stands whatever happens next
+        API->>DB: load the upload's events
+        API->>API: fit weekly backtest, pick logistic or inactivity rule
+        API->>DB: store scoring JSON on the dataset row (own transaction)
+        API-->>UI: 201 dataset, counts, derived signups, skipped rows
+    end
+    UI-->>U: switch to My data
+```
+
+Failure behaviour: any error before the commit rolls back and the old upload stays. A scoring failure stores `scoring.method = "failed"` and the Churn Risk page offers Retry (`POST /datasets/{id}/score`). Scoring (`services/upload_scoring.py`): weekly cutoffs (latest 26), 2 test cutoffs with a purge gap so no training label overlaps the test period, logistic regression against the days-since-last-activity rule (at risk at 7 days or more); the model is used only if its PR-AUC beats the rule's by at least 0.02. Floors: at least 200 test rows and 20 churners and 20 non-churners in the test and 20 churners in training, else `rule_unchecked` (at least 28 days of history, shown as not checked on the user's data), else `unavailable`. Roughly 9 weeks of history are needed for a checked result. The fitted model is stored as JSON numbers and applied as a dot product.
 
 ## 4.6 Saved reports (P1)
 

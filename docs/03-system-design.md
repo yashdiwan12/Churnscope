@@ -5,11 +5,11 @@
 ```
 backend/app/
 ├── main.py                 app factory, CORS, router mounting, error handlers
-├── api/routes/             health, events, analytics, churn, reports
+├── api/routes/             health, events, analytics, churn, reports, datasets
 ├── core/                   config.py · security.py (JWT) · logging.py
-├── db/                     session.py · models.py · repositories.py
+├── db/                     session.py · models.py · repositories.py · datasets.py (ownership)
 ├── schemas/                Pydantic models
-├── services/               ingestion · analytics · features · prediction
+├── services/               ingestion · analytics · features · prediction · uploads · upload_scoring
 └── ml/                     train.py · evaluate.py · artifacts/
 ```
 
@@ -55,13 +55,18 @@ flowchart TD
 |---|---|---|---|---|
 | GET | `/health` | none | Liveness (+ DB check)  `[Built]` liveness only; DB check planned |
 | POST | `/events` | `X-API-Key` (service key) | Validate and store events (batch)  `[Built]` closed (503) unless `INGEST_API_KEY` is set; 5 MB / 5,000-event caps |
-| GET | `/analytics/overview` | required | Engagement summary  `[Built]` |
+| GET | `/analytics/overview` | required | Engagement summary  `[Built]`; takes `?dataset_id=` (default 1, the demo; another user's or a missing id is 404 `Dataset not found`) |
 | GET | `/analytics/funnel` | required | Funnel conversion  `[Built]` |
 | GET | `/analytics/retention` | required | Cohort retention  `[Built]` |
 | GET | `/analytics/engagement` | required | Activity trends  `[Built]` |
 | GET | `/customers/{customer_id}/insights` | required | Per-customer insights  `[Planned]` |
-| POST | `/churn/predict` | required | Churn-risk estimate for given customer ids  `[Built]` |
-| GET | `/churn/at-risk` | required | Ranked, paged churn-risk list for all eligible customers (`sort`: `risk_desc` default, `risk_asc`, `customer_asc`; `rank` always by risk), score histogram, model evaluation  `[Built]` (Phase 6) |
+| POST | `/churn/predict` | required | Churn-risk estimate for given customer ids (demo data only)  `[Built]` |
+| GET | `/churn/at-risk` | required | Ranked, paged churn-risk list for all eligible customers (`sort`: `risk_desc` default, `risk_asc`, `customer_asc`; `rank` always by risk), score histogram, model evaluation  `[Built]` (Phase 6); takes `?dataset_id=`: for an upload it ranks by the method scored on that file (logistic or inactivity rule), else 409 `Churn scoring is not available for this dataset` |
+| GET | `/datasets` | required | The demo dataset first, then the caller's upload: counts, `data_through`, `signup_rule`, `capabilities`, `scoring_method`  `[Built]` (Phase 6b) |
+| POST | `/datasets/check` | required | Multipart `file`; parses and summarises (rows, customers, time range, event names with counts, suggested mapping, skipped rows, first-week share and the approximate-signup warning); stores nothing  `[Built]` (Phase 6b) |
+| POST | `/datasets` | required | Multipart `file`, `mapping` (JSON), `derive_signup`, `acknowledge_approximate_signup`; imports as the caller's single upload, replacing the old one in one transaction, then scores it; 201, or 409 `storage_full`  `[Built]` (Phase 6b) |
+| DELETE | `/datasets/{id}` | required | Delete own upload (customers and events cascade); the demo, a missing id or someone else's is 404  `[Built]` (Phase 6b) |
+| POST | `/datasets/{id}/score` | required | (Re)run churn scoring on own upload; used after import and as Retry  `[Built]` (Phase 6b) |
 | GET | `/me` | required | Signed-in user (id, email, created_at)  `[Built]` |
 | GET/POST | `/me/reports` | required | List / save own reports (max 100)  `[Built]` |
 | DELETE | `/me/reports/{id}` | required | Delete own report; 404 for missing or someone else's  `[Built]` |
@@ -120,7 +125,7 @@ flowchart TD
     sz -- yes --> v["Validate each row<br/>EventIn: name allow-list, id pattern,<br/>tz-aware timestamp to UTC,<br/>not in the future (5 min skew) or before 2000,<br/>flat properties ≤ 4 KB, no extra fields"]
     v -- invalid --> rej["rejected: index + reason<br/>(values never echoed)"]
     v -- valid --> cu["Resolve customers<br/>upsert, keeping the earliest created_at, then SELECT ids"]
-    cu --> ins["INSERT events<br/>ON CONFLICT (event_id) DO NOTHING<br/>RETURNING event_id"]
+    cu --> ins["INSERT events<br/>ON CONFLICT (dataset_id, event_id) DO NOTHING<br/>RETURNING event_id"]
     ins --> cf["Count conflicts: duplicates whose content<br/>differs from the stored event (first write wins)"]
     ins --> ok{"DB error?"}
     ok -- yes --> rb["ROLLBACK: customers and events<br/>land together or not at all"]
@@ -131,7 +136,7 @@ flowchart TD
 
 In words:
 
-1. Read source → 2. validate columns/types → 3. normalise timestamps (UTC) and IDs → 4. check missing/invalid → 5. validate event names and property types, cap payload size → 6. dedupe by `event_id` → 7. insert with `ON CONFLICT (event_id) DO NOTHING` in a transaction → 8. record rejected-row reasons (no sensitive data in logs).
+1. Read source → 2. validate columns/types → 3. normalise timestamps (UTC) and IDs → 4. check missing/invalid → 5. validate event names and property types, cap payload size → 6. dedupe by `event_id` → 7. insert with `ON CONFLICT (dataset_id, event_id) DO NOTHING` in a transaction → 8. record rejected-row reasons (no sensitive data in logs).
 
 Result reports `received`, `inserted`, `duplicates` (event_id already stored or repeated in the batch), `conflicts` (duplicates whose content differs from what is stored; the stored row wins) and `rejected` (index + reason; payload values are never echoed). `[Built]` as `services/ingestion.py`; the HTTP route is not built yet.
 
@@ -182,34 +187,39 @@ flowchart LR
 
 ```
 frontend/
-├── app.py            config, demo banner, gate, st.navigation over the five views
+├── app.py            config, banner, gate, Data selector, st.navigation over six pages
 ├── gate.py           sign-in flow, GET /me on every rerun, stops on 403/503
 ├── auth.py           PKCE and token helpers (no Streamlit)
 ├── api_client.py     httpx wrapper: token header, timeouts, error mapping
-├── data.py           one cached (5 min) fetch per endpoint
+├── dataset.py        Data selector (Demo / My data), page context, banner text, 404 fallback to demo
+├── data.py           one cached (5 min) fetch per endpoint, keyed by dataset and user
 ├── filters.py        date sidebar, inclusive end date to API range
 ├── labels.py         window, freshness and percent text
 ├── charts.py         pure payload-to-Plotly functions
 ├── states.py         fixed-message error, empty and retry rendering
-└── views/            overview · funnel · retention · engagement · churn (My Workspace deferred)
+└── views/            overview · funnel · retention · engagement · churn · upload (My Workspace deferred)
 ```
 
 ```mermaid
 flowchart LR
     app["app.py<br/>banner, st.navigation"] --> gate["gate.py<br/>GET /me every rerun"]
-    gate -->|allowed| pages
+    gate -->|allowed| ds["dataset.py<br/>GET /datasets, Data selector"]
+    ds --> pages
     subgraph pages["views/"]
         ov["Overview"]
         fu["Funnels"]
         re["Retention"]
         en["Engagement"]
         ch["Churn Risk"]
+        up["Upload data"]
     end
     pages --> da["data.py<br/>5 min cache"]
     da --> cl["api_client.py<br/>token header, timeouts, error mapping"]
     cl --> api["FastAPI"]
     cl -.-> auth["Supabase Auth"]
 ```
+
+`dataset.py` asks `GET /datasets` on every rerun (uncached), so a deleted or foreign dataset id falls back to the demo before any page reads the shared result cache. Upload design: [Phase 6b spec](superpowers/specs/2026-11-01-phase6b-uploads-design.md); flow: [4.5a](04-request-flows.md).
 
 UI rules: label date ranges and denominators; show data freshness; empty/loading/error states; no charts implying unsupported precision; never display fabricated analytics or scores.
 

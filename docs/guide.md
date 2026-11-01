@@ -38,4 +38,4 @@ Datasets → metric definitions → Pandas analytics → DB + ingestion → API 
 
 ## Where to go next
 
-Current status and the next steps are in [progress.md](../progress.md). Phases 0-6 are built (the Streamlit dashboard is Phase 6; its design is in [superpowers/specs/2026-10-30-phase6-dashboard-design.md](superpowers/specs/2026-10-30-phase6-dashboard-design.md)). Authentication design and spike results are in [superpowers/specs/2026-10-29-phase5-auth-design.md](superpowers/specs/2026-10-29-phase5-auth-design.md). Measured model results and limits: [model_card.md](model_card.md).
+Current status and the next steps are in [progress.md](../progress.md). Phases 0-6 are built, and Phase 6b (uploads, [spec](superpowers/specs/2026-11-01-phase6b-uploads-design.md)) is built on its branch (the Streamlit dashboard is Phase 6; its design is in [superpowers/specs/2026-10-30-phase6-dashboard-design.md](superpowers/specs/2026-10-30-phase6-dashboard-design.md)). Authentication design and spike results are in [superpowers/specs/2026-10-29-phase5-auth-design.md](superpowers/specs/2026-10-29-phase5-auth-design.md). Measured model results and limits: [model_card.md](model_card.md).

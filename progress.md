@@ -2,7 +2,7 @@
 
 Live tracker of implementation progress per phase. Detailed notes, decisions, and evidence live in each phase's `docs/history/<phase>/history.md`; the phase summary table is in [docs/10-project-history.md](docs/10-project-history.md).
 
-**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-10-31 · Phase 6 merged into `main`: backend 281 and frontend 115 tests pass locally at the last full run
+**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-11-01 · Phase 6b built on branch `phase-6b-uploads` (merge pending): backend 392 (2 opt-in timing tests skipped) and frontend 192 tests pass locally at the last full run
 
 ## Summary
 
@@ -15,7 +15,7 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 | 4 | Churn model | ✅ Done | 8 / 8 |
 | 5 | Authentication & authorization | ✅ Done | 8 / 8 |
 | 6 | Dashboard | ✅ Done (merged) | 7 / 7 |
-| 6b | Bring your own data (uploads) | ⬜ Not started (design pending) | — |
+| 6b | Bring your own data (uploads) | ✅ Done (merge pending) | 8 / 8 |
 | 7 | Quality & documentation | ⬜ Not started | 0 / 10 |
 
 ## Phase 0 — Setup ✅  ([history](docs/history/phase-0-setup/history.md))
@@ -92,8 +92,17 @@ Spec: [docs/superpowers/specs/2026-10-30-phase6-dashboard-design.md](docs/superp
 - [x] Loading, empty, error states (shared `states.py` with fixed messages and Retry, used by every page)
 - Saved views (optional, P1): **deferred**, not counted. `/me/reports` already exists; the UI can follow later.
 
-## Phase 6b — Bring your own data (uploads) ⬜  (design pending)
-Users upload their own events and get the analytics and a churn report on them. Needs its own design before any code: an ownership migration, dataset-scoped queries and cache keys (the Phase 6 shared cache is safe only while data is shared), CSV validation and event-name mapping, size limits for the free database tier, and how to score a user's data with a model trained on synthetic data. Starts only after Phase 6 ships.
+## Phase 6b — Bring your own data (uploads) ✅  ([history](docs/history/phase-6-dashboard/history.md#phase-6b--bring-your-own-data-uploads))
+Spec: [docs/superpowers/specs/2026-11-01-phase6b-uploads-design.md](docs/superpowers/specs/2026-11-01-phase6b-uploads-design.md) · plan: [docs/superpowers/plans/2026-11-01-phase6b-uploads.md](docs/superpowers/plans/2026-11-01-phase6b-uploads.md) · executed subagent-driven on branch `phase-6b-uploads`; every task independently reviewed. Built, not yet merged.
+- [x] Datasets table and migration `0003`, dataset-scoped queries, ownership rules (404 for others' ids)
+- [x] `?dataset_id=` on analytics and churn routes; dataset-keyed churn cache
+- [x] CSV parsing and `POST /datasets/check` (limits, scoped 422, approximate-signup warning)
+- [x] Import (mapping, derived signup, one transaction, global cap), list and delete
+- [x] Data selector, dataset- and user-keyed frontend caches, banner and notes
+- [x] Upload data page
+- [x] Churn on uploads trained and backtested on the file's own history (JSON model, floors, Retry)
+- [x] Purge script (`scripts/purge_uploads.py`), docs, progress
+- Not counted, still open: whole-branch review, real run-through with the user on three files, push and merge (the user is asked first). Import timing on the real Supabase project was measured 2026-11-01 (50,000 events plus 10,000 customers in 6.7 s; limits stand).
 
 ## Phase 7 — Quality & documentation ⬜  ([history](docs/history/phase-7-quality-and-docs/history.md))
 Nothing in Phase 7 is ticked: its items are a consolidated final pass. Much of the underlying coverage already exists from earlier phases (ingestion, analytics known-example, model/artifact, auth/ownership and RLS tests) and CI runs on GitHub, so the pass is mostly audit, gaps and documentation, not new test suites. Inherited items are listed after the checklist.

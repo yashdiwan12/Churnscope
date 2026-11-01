@@ -179,6 +179,6 @@ Invalid CSV, missing columns and over-limit files return fixed 4xx messages with
 
 ## 12. Open points
 
-- Limits (5 MB, 50,000 rows, 10,000 customers) are provisional until task 0 times a real import. The 300,000-event global cap is backed by the size measurement in section 4 and is re-measured before deploy (Phase 7).
+- Limits (5 MB, 50,000 rows, 10,000 customers) **stand**. Task 0 was run on 2026-11-01 on the Supabase project (session pooler, scratch schema `timing_6b`, dropped afterwards), same table shape as migration 0003, batches of 5,000 in one transaction under the advisory lock: connect and first statement 3.1 s; insert 10,000 customers 2.0 s; insert 10,000 customers plus 50,000 events 6.7 s in total; load the 50,000 events back (as scoring does) 1.5 s; cascade delete of all of them 0.9 s. The pooler's statement timeout is 2 min. With the local fit time (0.8 s) a worst-case replace plus scoring is about 10 to 12 s, well inside the 60 s frontend timeout. A free-tier cold start comes on top and was not measured. The 300,000-event global cap is backed by the size measurement in section 4 and is re-measured before deploy (Phase 7).
 - The 0.02 PR-AUC margin and the floors (200 test rows, 20 per class) are judgement calls; revisit them after the real run-through.
 - No automatic expiry in 6b. The upload notice says so, and a manual purge script covers the gap. Automatic expiry can wait for Phase 7.
