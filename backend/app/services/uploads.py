@@ -4,7 +4,9 @@ Privacy rule for this module: no message, exception text or log line ever contai
 the uploaded file. Problems are reported as codes and 1-based data row numbers only.
 """
 
+import hashlib
 import io
+import json
 import logging
 import re
 import warnings
@@ -15,8 +17,9 @@ from fastapi import Request
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.formparsers import MultiPartException
 
+from app.db.models import Dataset
 from app.schemas.events import MAX_CLOCK_SKEW, MIN_EVENT_TIME
-from app.services.metrics import EVENT_NAMES
+from app.services.metrics import EVENT_NAMES, FUNNEL_STEPS, QUALIFYING_EVENTS
 
 logger = logging.getLogger("churnscope.uploads")
 
@@ -60,6 +63,9 @@ class ParsedFile:
     skipped: list[tuple[int, str]]  # (1-based data row, code), all of them
     total_rows: int
     zoneless: bool
+    # Trimmed event name of each skipped row, parallel to `skipped`. Held in memory only, so a
+    # bad row of an event name mapped to "ignore" can be left out of the 5% rule (spec D8).
+    skipped_names: list[str] = field(default_factory=list)
 
 
 def normalise(name: str) -> str:
@@ -146,6 +152,7 @@ def parse_csv(raw: bytes, now: pd.Timestamp) -> ParsedFile:
         code = code.mask(mask, reason)
     bad = code != ""
     skipped = [(int(i) + 1, str(code.iloc[i])) for i in range(total) if bad.iloc[i]]
+    skipped_names = [str(n) for n in name[bad]]
 
     good = ~bad
     rows = pd.DataFrame(
@@ -169,7 +176,13 @@ def parse_csv(raw: bytes, now: pd.Timestamp) -> ParsedFile:
         )
     zoneless = bool((~has_zone[good]).any())
     logger.info("parsed upload: %d rows, %d skipped", total, len(skipped))
-    return ParsedFile(rows=rows, skipped=skipped, total_rows=total, zoneless=zoneless)
+    return ParsedFile(
+        rows=rows,
+        skipped=skipped,
+        total_rows=total,
+        zoneless=zoneless,
+        skipped_names=skipped_names,
+    )
 
 
 def first_week_share(rows: pd.DataFrame) -> float:
@@ -179,6 +192,206 @@ def first_week_share(rows: pd.DataFrame) -> float:
     first = rows.groupby("customer_id")["event_timestamp"].min()
     cutoff = first.min() + pd.Timedelta(days=CENSOR_WINDOW_DAYS)
     return float((first < cutoff).sum() / len(first))
+
+
+@dataclass
+class Prepared:
+    """What an import stores. Customer ids here are the file's (external) ids."""
+
+    events: pd.DataFrame  # customer_id, event_name, event_timestamp, event_id, properties
+    customers: pd.DataFrame  # customer_id, created_at (the customer's first stored event)
+    mapping: dict  # every event name in the file -> our name, or None for ignored
+    signup_rule: str  # "event" or "derived_from_first_event"
+    mapped_counts: dict[str, int]  # stored events per our event name, derived signups included
+    invalid_rows: int
+    ignored_rows: int
+    duplicate_rows: int
+    derived_signups: int
+    skipped: list[tuple[int, str]]  # the invalid rows that count, all of them
+
+
+def derive_event_id(customer_id: str, event_name: str, ts: pd.Timestamp) -> str:
+    """Stable id for a row without one. No occurrence number: identical rows are duplicates."""
+    key = f"{customer_id}|{event_name}|{ts.isoformat()}"
+    return hashlib.sha256(key.encode()).hexdigest()[:32]
+
+
+def _full_mapping(mapping: object, present: set[str]) -> dict[str, str | None]:
+    """Validate the mapping; a name in the file but absent from the mapping is ignored."""
+    if not isinstance(mapping, dict):
+        raise UploadRejected("bad_mapping", "The mapping must be an object of event names.")
+    for source, target in mapping.items():
+        if not isinstance(source, str) or source not in present:
+            raise UploadRejected(
+                "bad_mapping", "The mapping names an event that is not in the file."
+            )
+        if target is not None and (not isinstance(target, str) or target not in EVENT_NAMES):
+            raise UploadRejected("bad_mapping", "The mapping targets an unknown event name.")
+    return {name: mapping.get(name) for name in sorted(present)}
+
+
+def prepare(
+    parsed: ParsedFile,
+    mapping: dict[str, str | None],
+    derive_signup: bool,
+    acknowledged: bool,
+) -> Prepared:
+    """Apply the mapping, drop duplicates, enforce the 5% rule, derive signups (D6, D6a, D8)."""
+    rows = parsed.rows
+    full = _full_mapping(mapping, set(rows["source_name"].unique()))
+    targets = {t for t in full.values() if t is not None}
+    if derive_signup and "signup" in targets:
+        raise UploadRejected(
+            "derive_not_allowed",
+            "Signup can only be derived when no event is mapped to signup.",
+        )
+    if not targets & set(QUALIFYING_EVENTS):
+        raise UploadRejected(
+            "no_activity_event",
+            "Map at least one event to " + ", ".join(QUALIFYING_EVENTS) + ".",
+        )
+
+    target = rows["source_name"].map(full)
+    keep = target.notna()
+    events = rows.loc[keep, ["customer_id", "event_timestamp", "event_id"]].copy()
+    events["event_name"] = target[keep]
+    no_id = events["event_id"].isna()
+    events.loc[no_id, "event_id"] = [
+        derive_event_id(c, n, t)
+        for c, n, t in zip(
+            events.loc[no_id, "customer_id"],
+            events.loc[no_id, "event_name"],
+            events.loc[no_id, "event_timestamp"],
+            strict=True,
+        )
+    ]
+    dup = events["event_id"].duplicated(keep="first")
+    duplicate_rows = int(dup.sum())
+    events = events[~dup]
+
+    # The 5% rule: rows of an ignored event name and duplicate rows are out of both the invalid
+    # count and the denominator. A bad row counts as ignored only when its name is one the file
+    # shows among its valid rows (so one the user saw and chose to ignore).
+    ignored_names = {n for n, t in full.items() if t is None}
+    names = parsed.skipped_names
+    if len(names) != len(parsed.skipped):
+        names = [""] * len(parsed.skipped)
+    counted = [s for s, n in zip(parsed.skipped, names, strict=True) if n not in ignored_names]
+    ignored_rows = int((~keep).sum()) + len(parsed.skipped) - len(counted)
+    denominator = parsed.total_rows - ignored_rows - duplicate_rows
+    if denominator > 0 and len(counted) / denominator > MAX_INVALID_SHARE:
+        raise UploadRejected(
+            "too_many_invalid", f"More than {MAX_INVALID_SHARE:.0%} of the rows are invalid."
+        )
+    # Same rows as the check step's warning, so the gate matches what the user was shown.
+    if derive_signup and not acknowledged and first_week_share(rows) >= CENSOR_WARN_SHARE:
+        raise UploadRejected(
+            "acknowledgement_required",
+            "Confirm that derived signup dates are approximate before importing.",
+        )
+
+    events["properties"] = [{} for _ in range(len(events))]
+    derived = 0
+    if derive_signup:
+        first = (
+            events.sort_values("event_timestamp", kind="stable")
+            .groupby("customer_id", sort=False)
+            .head(1)
+        )
+        signups = pd.DataFrame(
+            {
+                "customer_id": first["customer_id"].to_numpy(),
+                "event_timestamp": first["event_timestamp"].to_numpy(),
+                "event_id": [
+                    derive_event_id(c, "signup", t)
+                    for c, t in zip(first["customer_id"], first["event_timestamp"], strict=True)
+                ],
+                "event_name": "signup",
+                "properties": [{"derived": True} for _ in range(len(first))],
+            }
+        )
+        signups["event_timestamp"] = pd.to_datetime(signups["event_timestamp"], utc=True)
+        signups = signups[~signups["event_id"].isin(set(events["event_id"]))]
+        derived = len(signups)
+        events = pd.concat([events, signups], ignore_index=True)
+    events = events[
+        ["customer_id", "event_name", "event_timestamp", "event_id", "properties"]
+    ].reset_index(drop=True)
+
+    customers = (
+        events.groupby("customer_id", sort=False)["event_timestamp"]
+        .min()
+        .rename("created_at")
+        .reset_index()
+    )
+    if len(customers) > MAX_CUSTOMERS:
+        raise UploadRejected(
+            "too_many_customers", f"The file has more than {MAX_CUSTOMERS} customers."
+        )
+    counts = events["event_name"].value_counts()
+    return Prepared(
+        events=events,
+        customers=customers,
+        mapping=full,
+        signup_rule="derived_from_first_event" if derive_signup else "event",
+        mapped_counts={str(k): int(v) for k, v in counts.items()},
+        invalid_rows=len(counted),
+        ignored_rows=ignored_rows,
+        duplicate_rows=duplicate_rows,
+        derived_signups=derived,
+        skipped=counted,
+    )
+
+
+def capabilities(dataset: Dataset) -> dict:
+    """Which pages work for a dataset. The demo has everything; churn waits for Task 7."""
+    if dataset.kind == "demo":
+        return {
+            "overview": True,
+            "engagement": True,
+            "retention": True,
+            "funnel": True,
+            "churn": True,
+            "funnel_missing": [],
+        }
+    counts = dataset.mapped_counts or {}
+
+    def has(name: str) -> bool:
+        return int(counts.get(name, 0)) > 0
+
+    missing = [step for step in FUNNEL_STEPS if not has(step)]
+    return {
+        "overview": True,
+        "engagement": True,
+        "retention": has("signup") or dataset.signup_rule == "derived_from_first_event",
+        "funnel": not missing,
+        "churn": False,
+        "funnel_missing": missing,
+    }
+
+
+def _flag(fields: dict[str, str], name: str) -> bool:
+    value = fields.get(name, "false")
+    if value not in ("true", "false"):
+        raise UploadRejected("bad_form", "Form flags must be true or false.")
+    return value == "true"
+
+
+def import_options(fields: dict[str, str]) -> tuple[dict, bool, bool]:
+    """(mapping, derive_signup, acknowledge_approximate_signup) from the import form fields.
+
+    Only the JSON shape is checked here; `prepare` checks the mapping against the file.
+    """
+    raw = fields.get("mapping")
+    if raw is None:
+        raise UploadRejected("bad_mapping", "A mapping is required.")
+    try:
+        mapping = json.loads(raw)
+    except ValueError:  # the decoder's message can quote the field
+        raise UploadRejected("bad_mapping", "The mapping must be JSON.") from None
+    if not isinstance(mapping, dict):
+        raise UploadRejected("bad_mapping", "The mapping must be an object of event names.")
+    return mapping, _flag(fields, "derive_signup"), _flag(fields, "acknowledge_approximate_signup")
 
 
 @dataclass
