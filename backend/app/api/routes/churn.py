@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
+from app.api.dependencies import DatasetDep
 from app.core.authorization import current_user
 from app.db.session import get_session
 from app.ml.artifact import ModelBundle
@@ -37,8 +38,12 @@ def at_risk(
     # The model check is declared first so a missing model is a 503 even if the DB is broken.
     bundle: Annotated[ModelBundle, Depends(get_bundle)],
     session: SessionDep,
+    dataset: DatasetDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
     sort: AtRiskSort = "risk_desc",
 ) -> AtRiskOut:
-    return prediction.at_risk(session, bundle, limit, offset, sort)
+    try:
+        return prediction.at_risk(session, bundle, dataset, limit, offset, sort)
+    except prediction.ScoringUnavailable as exc:
+        raise HTTPException(409, "Churn scoring is not available for this dataset") from exc

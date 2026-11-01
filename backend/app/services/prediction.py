@@ -1,12 +1,14 @@
 """Churn-risk inference. Uses the same feature code as training (app.services.features)."""
 
 import threading
+from collections import OrderedDict
 
 import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.db import repositories
 from app.db.datasets import DEMO_DATASET_ID
+from app.db.models import Dataset
 from app.ml.artifact import ModelBundle
 from app.schemas.churn import (
     AtRiskOut,
@@ -29,14 +31,18 @@ _NOT_ELIGIBLE = (
 )
 
 
-def default_cutoff(session: Session) -> pd.Timestamp | None:
+class ScoringUnavailable(Exception):
+    """The dataset cannot be scored (uploads are not scoreable yet)."""
+
+
+def default_cutoff(session: Session, dataset_id: int = DEMO_DATASET_ID) -> pd.Timestamp | None:
     """The last midnight (UTC) at or before the latest event.
 
     Training cutoffs always have complete data before them. Using the start of the *next* day
     would count the unobserved rest of the latest day as inactivity and inflate
     ``days_since_last_activity``, so the partial latest day is left out instead.
     """
-    through = repositories.data_through(session, DEMO_DATASET_ID)
+    through = repositories.data_through(session, dataset_id)
     return None if through is None else through.floor("D")
 
 
@@ -110,20 +116,30 @@ def predict(
 
 # ----------------------------------------------------------------------------- ranked list
 _BINS = 10
-# One entry: (model_version, cutoff, latest event id) -> scored frame. The key uses the highest
-# event id, not the latest timestamp: a late event with an old timestamp leaves max(timestamp)
-# unchanged but always raises max(id), so the list can never go stale.
+# Scored frames keyed by (dataset id, model_version, cutoff, latest event id). The key uses the
+# highest event id, not the latest timestamp: a late event with an old timestamp leaves
+# max(timestamp) unchanged but always raises max(id), so the list can never go stale.
+# Bounded to _CACHE_MAX entries; the least recently used entry is evicted first.
+_CACHE_MAX = 4
 _cache_lock = threading.Lock()
-_cache: tuple[tuple, pd.DataFrame] | None = None
+_cache: OrderedDict[tuple, pd.DataFrame] = OrderedDict()
 
 
 def clear_at_risk_cache() -> None:
-    global _cache
     with _cache_lock:
-        _cache = None
+        _cache.clear()
 
 
-def score_all(session: Session, bundle: ModelBundle, cutoff: pd.Timestamp) -> pd.DataFrame:
+def evict_dataset(dataset_id: int) -> None:
+    """Drop every cached list for one dataset (call when its rows change or it is deleted)."""
+    with _cache_lock:
+        for key in [k for k in _cache if k[0] == dataset_id]:
+            del _cache[key]
+
+
+def score_all(
+    session: Session, bundle: ModelBundle, dataset_id: int, cutoff: pd.Timestamp
+) -> pd.DataFrame:
     """Score every eligible customer at ``cutoff``.
 
     Columns ``customer_id`` (external id) and ``risk_score`` (rounded to 4 places), sorted by
@@ -132,13 +148,11 @@ def score_all(session: Session, bundle: ModelBundle, cutoff: pd.Timestamp) -> pd
     empty = pd.DataFrame(
         {"customer_id": pd.Series(dtype=str), "risk_score": pd.Series(dtype=float)}
     )
-    raw = _score_frame(
-        bundle, repositories.load_events(session, DEMO_DATASET_ID, until=cutoff), cutoff
-    )
+    raw = _score_frame(bundle, repositories.load_events(session, dataset_id, until=cutoff), cutoff)
     if raw.empty:
         return empty
     pks = [int(p) for p in raw.index]
-    names = repositories.customer_external_ids(session, DEMO_DATASET_ID, pks)
+    names = repositories.customer_external_ids(session, dataset_id, pks)
     frame = pd.DataFrame(
         {"customer_id": [names[p] for p in pks], "risk_score": [round(float(v), 4) for v in raw]}
     )
@@ -147,14 +161,18 @@ def score_all(session: Session, bundle: ModelBundle, cutoff: pd.Timestamp) -> pd
     )
 
 
-def _scored(session: Session, bundle: ModelBundle, cutoff: pd.Timestamp) -> pd.DataFrame:
-    global _cache
-    key = (bundle.version, cutoff, repositories.latest_event_id(session, DEMO_DATASET_ID))
+def _scored(
+    session: Session, bundle: ModelBundle, dataset_id: int, cutoff: pd.Timestamp
+) -> pd.DataFrame:
+    key = (dataset_id, bundle.version, cutoff, repositories.latest_event_id(session, dataset_id))
     with _cache_lock:
-        if _cache is not None and _cache[0] == key:
-            return _cache[1]
-        frame = score_all(session, bundle, cutoff)
-        _cache = (key, frame)
+        if key in _cache:
+            _cache.move_to_end(key)
+            return _cache[key]
+        frame = score_all(session, bundle, dataset_id, cutoff)
+        _cache[key] = frame
+        while len(_cache) > _CACHE_MAX:
+            _cache.popitem(last=False)
         return frame
 
 
@@ -189,12 +207,15 @@ def _sorted_positions(scored: pd.DataFrame, sort: AtRiskSort) -> list[int]:
 def at_risk(
     session: Session,
     bundle: ModelBundle,
+    dataset: Dataset,
     limit: int,
     offset: int,
     sort: AtRiskSort = "risk_desc",
 ) -> AtRiskOut:
-    cutoff = default_cutoff(session)
-    scored = _scored(session, bundle, cutoff) if cutoff is not None else None
+    if dataset.kind != "demo":
+        raise ScoringUnavailable(dataset.id)
+    cutoff = default_cutoff(session, dataset.id)
+    scored = _scored(session, bundle, dataset.id, cutoff) if cutoff is not None else None
     scores = [] if scored is None else scored["risk_score"].tolist()
 
     # Integer arithmetic on the rounded scores: float bin edges would misplace 0.3, 0.7, etc.
@@ -227,7 +248,7 @@ def at_risk(
     return AtRiskOut(
         model_version=bundle.version,
         cutoff=cutoff,
-        data_through=repositories.data_through(session, DEMO_DATASET_ID),
+        data_through=repositories.data_through(session, dataset.id),
         window_days=features.WINDOW_DAYS,
         horizon_days=features.HORIZON_DAYS,
         decision_threshold=bundle.threshold,
