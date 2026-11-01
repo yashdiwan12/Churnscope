@@ -10,6 +10,7 @@ from dataclasses import dataclass
 import streamlit as st
 
 from api_client import ApiClient, ApiError, NotAllowed, NotSignedIn, ServiceUnavailable
+from labels import escape_markdown
 from states import render_error
 
 DEMO_ID = 1
@@ -36,7 +37,7 @@ class Context:
 def banner_text(ctx: Context) -> str:
     if ctx.kind == "demo":
         return DEMO_BANNER
-    return f"Your uploaded data: {ctx.name}, private to you."
+    return f"Your uploaded data: {escape_markdown(ctx.name)}, private to you."
 
 
 def _label(row: dict) -> str:
@@ -49,6 +50,10 @@ def select(api: ApiClient, me: dict) -> Context:
     except (ApiError, NotAllowed, NotSignedIn, ServiceUnavailable) as exc:
         render_error(exc, retry_key="dataset_retry")
         st.stop()
+    # A page that created or removed an upload cannot set the selector's key after the selector
+    # exists in the same run, so it leaves the id here for the next run to apply first.
+    if "next_dataset_id" in st.session_state:
+        st.session_state["dataset_id"] = st.session_state.pop("next_dataset_id")
     by_id = {row["id"]: row for row in rows}
     if not by_id:  # the API always lists the demo; treat an empty list as unavailable
         render_error(ServiceUnavailable("no datasets"), retry_key="dataset_retry")

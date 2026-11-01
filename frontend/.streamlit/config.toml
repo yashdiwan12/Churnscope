@@ -4,3 +4,6 @@ showErrorDetails = "none"
 
 [browser]
 gatherUsageStats = false
+
+[server]
+maxUploadSize = 5

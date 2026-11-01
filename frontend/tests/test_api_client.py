@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from api_client import ApiClient, NotAllowed, NotSignedIn, ServiceUnavailable
+from api_client import ApiClient, ApiError, NotAllowed, NotSignedIn, ServiceUnavailable
 
 
 def client_for(handler) -> ApiClient:
@@ -70,3 +70,22 @@ def test_default_timeout_is_unchanged():
 def test_post_and_delete_accept_timeout():
     assert _timeout_seen(lambda c: c.post("/x", json={}, timeout=30))["read"] == 30
     assert _timeout_seen(lambda c: c.delete("/x", timeout=30))["read"] == 30
+
+
+@pytest.mark.parametrize(
+    "body,code",
+    [
+        ({"detail": {"code": "empty_file", "message": "secret"}}, "empty_file"),
+        ({"detail": "plain text"}, None),
+        ({"detail": {"code": 5}}, None),
+        ({"detail": [{"loc": ["x"]}]}, None),
+        (None, None),
+    ],
+)
+def test_api_error_exposes_only_the_code(body, code):
+    response = httpx.Response(422, json=body) if body is not None else httpx.Response(422)
+    with pytest.raises(ApiError) as caught:
+        client_for(lambda r: response).get("/x")
+    assert caught.value.status_code == 422
+    assert caught.value.code == code
+    assert "secret" not in str(caught.value)

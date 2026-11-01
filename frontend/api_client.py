@@ -23,9 +23,10 @@ class ServiceUnavailable(Exception):
 
 
 class ApiError(Exception):
-    def __init__(self, status_code: int):
+    def __init__(self, status_code: int, code: str | None = None):
         super().__init__(f"API returned {status_code}")
         self.status_code = status_code
+        self.code = code  # the error's machine code only, never the server's message text
 
 
 class ApiClient:
@@ -78,5 +79,13 @@ class ApiClient:
         if status >= 500:
             raise ServiceUnavailable("The service is unavailable")
         if status >= 400:
-            raise ApiError(status)
+            raise ApiError(status, _error_code(response))
         return None if status == 204 else response.json()
+
+
+def _error_code(response: httpx.Response) -> str | None:
+    try:
+        code = response.json()["detail"]["code"]
+    except (ValueError, KeyError, TypeError):
+        return None
+    return code if isinstance(code, str) else None

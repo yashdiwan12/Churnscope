@@ -4,7 +4,7 @@ import streamlit as st
 
 import dataset
 import gate
-from views import churn, engagement, funnel, overview, retention
+from views import churn, engagement, funnel, overview, retention, upload
 
 # (view module, title, url_path). Adding a page is one line here.
 PAGES = [
@@ -13,6 +13,7 @@ PAGES = [
     (retention, "Retention", "retention"),
     (engagement, "Engagement", "engagement"),
     (churn, "Churn Risk", "churn-risk"),
+    (upload, "Upload data", "upload"),
 ]
 
 st.set_page_config(page_title="Churnscope", layout="wide")

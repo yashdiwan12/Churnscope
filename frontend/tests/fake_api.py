@@ -85,6 +85,7 @@ class Requested(list):
     def __init__(self):
         super().__init__()
         self.queries: list[dict[str, str]] = []
+        self.calls: list[tuple[str, str, dict]] = []  # (method, path, request kwargs)
 
 
 ALL_CAPABILITIES = {
@@ -143,9 +144,13 @@ def install(monkeypatch, routes: dict[str, tuple[int, dict | list | None]]) -> R
         requested.queries.append(
             dict(httpx.URL(str(url)).params) | dict(kwargs.get("params") or {})
         )
-        if path not in routes:
-            raise AssertionError(f"unexpected request to {path}")
-        status, body = routes[path]
+        requested.calls.append((method, path, kwargs))
+        key = f"{method} {path}" if f"{method} {path}" in routes else path  # method-specific first
+        if key not in routes:
+            raise AssertionError(f"unexpected request to {method} {path}")
+        status, body = routes[key]
+        if isinstance(body, Exception):
+            raise body
         return httpx.Response(status, json=body, request=httpx.Request(method, url))
 
     monkeypatch.setattr(httpx.Client, "request", fake_request)
