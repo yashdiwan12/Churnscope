@@ -105,7 +105,12 @@ def seed_demo(session):
 def test_analytics_routes_accept_demo_default(session, users, path):
     seed_demo(session)
     c = client_for(session, users[0])
-    assert c.get(path).json() == c.get(path, params={"dataset_id": 1}).json()
+    default = c.get(path)
+    explicit = c.get(path, params={"dataset_id": 1})
+    assert default.status_code == 200
+    assert explicit.status_code == 200
+    assert "detail" not in default.json()
+    assert default.json() == explicit.json()
 
 
 @pytest.mark.parametrize("path", PATHS)
