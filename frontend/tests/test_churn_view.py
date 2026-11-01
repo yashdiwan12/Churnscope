@@ -396,9 +396,11 @@ def test_upload_churn_shows_backtest_counts(monkeypatch):
     shown = texts(run(at))
     assert calls(requested)[-1]["dataset_id"] == 7
     assert "Method used: a model trained on your file" in shown
-    assert "Measured on your history: 400 test rows, 90 churners" in shown
+    assert (
+        "Measured on your history: 400 test rows, 90 churners, PR-AUC model 0.710 vs rule 0.550"
+        in shown
+    )
     assert "Training: 1,200 rows, 300 churners" in shown
-    assert "PR-AUC: model 0.710, rule 0.550" in shown
     assert "ROC-AUC: model 0.830, rule 0.700" in shown
     assert UPLOAD_CAVEAT in shown
     assert DERIVED in shown
@@ -434,6 +436,7 @@ def test_rule_view_shows_days_not_probability(monkeypatch):
     assert frame["days inactive"].dtype.kind == "f"
     assert "Method used: days since last activity (the rule)" in shown
     assert "At risk (inactive for 7 or more days): 18 (n=120)" in shown
+    assert "the longer they have been quiet, the more likely they stay quiet" in shown
     assert "probability" not in shown.lower()
     assert "risk score" not in shown.lower()
     assert list(at.selectbox[0].options) == [
@@ -451,6 +454,8 @@ def test_rule_unchecked_label(monkeypatch):
     assert "Not checked on your data: too little history." in shown
     assert "A check needs about 9 weeks of events." in shown
     assert "PR-AUC" not in shown and "Measured on your history" not in shown
+    assert "Customers are ranked by days since their last activity." in shown
+    assert "the more likely they stay quiet" not in shown
     assert "days inactive" in shown
     assert UPLOAD_CAVEAT in shown
 
@@ -493,8 +498,28 @@ def test_upload_scoring_retry_failure_shows_fixed_copy(monkeypatch):
     assert "boom from server" not in shown
 
 
-def test_upload_without_scoring_shows_not_available(monkeypatch):
-    at, requested = upload_app(monkeypatch, upload_row(None, churn=False), {})
+def test_upload_without_scoring_offers_retry(monkeypatch):
+    # The import committed but storing the score failed: scoring_method is None, signup exists.
+    routes = {"POST /datasets/7/score": (200, upload_row("inactive_rule"))}
+    at, requested = upload_app(monkeypatch, upload_row(None, churn=False), routes)
     shown = texts(run(at))
-    assert "Churn scoring is not available for this dataset yet." in shown
+    assert "Churn scoring failed for your file." in shown
+    assert calls(requested) == []
+    retry = [b for b in at.get("button") if b.label == "Retry scoring"]
+    assert len(retry) == 1
+    retry[0].click()
+    run(at)
+    assert ("POST", "/datasets/7/score") in [(m, p) for m, p, _ in requested.calls]
+
+
+def test_upload_without_signup_names_the_missing_signup(monkeypatch):
+    row = upload_row(None, churn=False)
+    row["capabilities"] = row["capabilities"] | {"retention": False}
+    at, requested = upload_app(monkeypatch, row, {})
+    shown = texts(run(at))
+    assert (
+        "Churn Risk needs a signup event. Map one of your events to signup, or re-upload with "
+        '"first event counts as signup".'
+    ) in shown
+    assert "Retry scoring" not in [b.label for b in at.get("button")]
     assert calls(requested) == []

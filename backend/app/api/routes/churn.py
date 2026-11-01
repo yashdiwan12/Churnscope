@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import DatasetDep
 from app.core.authorization import current_user
+from app.db import datasets
 from app.db.session import get_session
 from app.ml.artifact import ModelBundle
 from app.schemas.churn import AtRiskOut, AtRiskSort, PredictRequest, PredictResponse
@@ -23,6 +24,18 @@ def get_bundle(request: Request) -> ModelBundle:
     return bundle
 
 
+def optional_bundle(
+    request: Request,
+    dataset_id: Annotated[int, Query(ge=1, le=2**63 - 1)] = datasets.DEMO_DATASET_ID,
+) -> ModelBundle | None:
+    """The shipped model, required only for the demo. A missing model is a 503 for a demo request
+    before the database is touched; an upload is scored from its own stored method."""
+    bundle = getattr(request.app.state, "model_bundle", None)
+    if bundle is None and dataset_id == datasets.DEMO_DATASET_ID:
+        raise HTTPException(503, "Churn model is unavailable")
+    return bundle
+
+
 @router.post("/predict", response_model=PredictResponse)
 def predict(
     # The model check is declared first so a missing model is a 503 even if the DB is broken.
@@ -36,13 +49,15 @@ def predict(
 @router.get("/at-risk", response_model=AtRiskOut)
 def at_risk(
     # The model check is declared first so a missing model is a 503 even if the DB is broken.
-    bundle: Annotated[ModelBundle, Depends(get_bundle)],
+    bundle: Annotated[ModelBundle | None, Depends(optional_bundle)],
     session: SessionDep,
     dataset: DatasetDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
     sort: AtRiskSort = "risk_desc",
 ) -> AtRiskOut:
+    if bundle is None and dataset.kind == "demo":
+        raise HTTPException(503, "Churn model is unavailable")
     try:
         return prediction.at_risk(session, bundle, dataset, limit, offset, sort)
     except prediction.ScoringUnavailable as exc:

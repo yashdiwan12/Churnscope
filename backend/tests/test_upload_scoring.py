@@ -325,3 +325,11 @@ def test_fit_time_on_largest_upload():
     seconds = time.perf_counter() - start
     print(f"fit on 50,000 events / 10,000 customers: {seconds:.2f} s, method {out['method']}")
     assert seconds < 20
+
+
+def test_margin_is_exact_despite_float_error(monkeypatch):
+    # 0.82 - 0.80 is 0.01999... in floating point, yet it is the full margin.
+    _patch_metrics(monkeypatch, model_pr=0.82, rule_pr=0.8)
+    assert fit(recency_file(), NOW)["method"] == "logistic"
+    _patch_metrics(monkeypatch, model_pr=0.819, rule_pr=0.8)
+    assert fit(recency_file(), NOW)["method"] == "inactive_rule"

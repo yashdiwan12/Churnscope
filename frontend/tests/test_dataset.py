@@ -166,10 +166,10 @@ def test_missing_capability_makes_no_request(monkeypatch):
     assert requested == []
 
 
-def test_upload_without_churn_shows_not_available_and_makes_no_request(monkeypatch):
+def test_upload_without_scoring_offers_retry_and_makes_no_request(monkeypatch):
     at, requested = view_app(monkeypatch, "churn", UPLOAD_ROW, {})
     shown = texts(run(at))
-    assert "Churn scoring is not available for this dataset yet." in shown
+    assert "Churn scoring failed for your file." in shown
     assert requested == []
 
 

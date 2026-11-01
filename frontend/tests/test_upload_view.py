@@ -221,12 +221,14 @@ def test_preview_names_unavailable_pages():
     assert result["Engagement"] is None
     assert result["Retention"] is None
     assert result["Funnel"] == "needs the export step"
-    assert result["Churn Risk"] == "not available for uploaded data yet"
+    assert result["Churn Risk"] == upload.CHURN_OK
 
     result = upload.preview({"login": "login"}, False, CHECK_OK)
     assert result["Retention"] == "needs a signup event, or the first-event option"
     assert result["Funnel"] == "needs the signup, first_report and export steps"
     assert upload.preview({"login": "login"}, True, CHECK_OK)["Retention"] is None
+    assert result["Churn Risk"] == "needs a signup event, or the first-event option"
+    assert upload.preview({"login": "login"}, True, CHECK_OK)["Churn Risk"] == upload.CHURN_OK
 
     result = upload.preview({"Sign Up": "signup"}, False, CHECK_OK)
     assert result["Overview"] == "needs at least one activity event"
@@ -243,7 +245,51 @@ def test_preview_is_driven_by_the_check_lists():
 def test_preview_shown_on_page(monkeypatch):
     shown = texts(checked(monkeypatch)[0])
     assert "Funnel: needs the first_report and export steps" in shown
-    assert "Churn Risk: not available for uploaded data yet" in shown
+    assert (
+        "Churn Risk: will work; results are checked on your own history from about 9 weeks" in shown
+    )
+    assert "not available for uploaded data yet" not in shown
+
+
+def test_preview_churn_needs_28_days_of_history():
+    short = CHECK_OK | {"first_event": "2026-10-01T00:00:00Z", "last_event": "2026-10-20T00:00:00Z"}
+    mapping = {"Sign Up": "signup", "login": "login"}
+    assert upload.preview(mapping, False, short)["Churn Risk"] == (
+        "needs at least 28 days of history"
+    )
+    edge = CHECK_OK | {"last_event": "2026-10-29T00:00:00Z"}
+    assert upload.preview(mapping, False, edge)["Churn Risk"] == upload.CHURN_OK
+
+
+def test_invalid_character_skip_has_fixed_copy():
+    line = upload._skip_line({"row": 3, "code": "invalid_character"})
+    assert line == "row 3: a value contains a character that cannot be stored"
+
+
+def test_retry_rebuilds_the_form_from_the_current_mapping(monkeypatch):
+    at, requested = checked(monkeypatch, extra={"POST /datasets": (200, httpx.ReadTimeout("t"))})
+    click(at, "Import")
+    next(s for s in at.selectbox if s.label == "Map Sign Up").select("Ignore")
+    run(at)
+    at.routes["POST /datasets"] = (201, IMPORT_OK)
+    click(at, "Retry import")
+    first, second = posts(requested)
+    assert json.loads(first["data"]["mapping"])["Sign Up"] == "signup"
+    assert json.loads(second["data"]["mapping"])["Sign Up"] is None
+
+
+def test_retry_is_disabled_when_replace_confirmation_is_removed(monkeypatch):
+    at, _ = checked(
+        monkeypatch,
+        datasets=DATASETS_WITH_UPLOAD,
+        dataset_id=7,
+        extra={"POST /datasets": (200, httpx.ReadTimeout("t"))},
+    )
+    tick(at, REPLACE)
+    click(at, "Import")
+    assert not button(at, "Retry import").disabled
+    tick(at, REPLACE, False)
+    assert button(at, "Retry import").disabled
 
 
 def test_import_success_switches_dataset_and_clears_cache(monkeypatch):
@@ -350,7 +396,10 @@ def test_import_timeout_offers_retry_with_same_bytes(monkeypatch):
     click(at, "Import")
     assert "The service is unavailable. Please try again shortly." in texts(at)
     at.routes["POST /datasets"] = (201, IMPORT_OK)
-    at.routes["/datasets"] = lambda: after(requested, "POST", DATASETS_WITH_UPLOAD)
+    # The listing shows the upload only once the second (successful) POST has been made.
+    at.routes["/datasets"] = lambda: (
+        DATASETS_WITH_UPLOAD if len(posts(requested)) >= 2 else DATASETS_DEMO_ONLY
+    )
     click(at, "Retry import")
     first, second = posts(requested)
     assert first["files"]["file"] == second["files"]["file"] == FILE

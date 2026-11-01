@@ -5,6 +5,7 @@ for a rejected file is fixed text chosen by the error's code; server text is nev
 """
 
 import json
+from datetime import date
 
 import streamlit as st
 
@@ -70,10 +71,14 @@ SKIP_REASONS = {
     "bad_timestamp": "the timestamp could not be read",
     "timestamp_out_of_range": "the timestamp is outside the supported date range",
     "value_too_long": "a value is too long",
+    "invalid_character": "a value contains a character that cannot be stored",
 }
 GENERIC_SKIP = "the row could not be used"
 PAGE_ORDER = ["Overview", "Funnel", "Retention", "Engagement", "Churn Risk"]
-CHURN_REASON = "not available for uploaded data yet"
+CHURN_MIN_DAYS = 28
+CHURN_NO_SIGNUP = "needs a signup event, or the first-event option"
+CHURN_SHORT = "needs at least 28 days of history"
+CHURN_OK = "will work; results are checked on your own history from about 9 weeks"
 
 
 def message_for(code: str | None) -> str:
@@ -88,6 +93,20 @@ def current_upload() -> tuple[str, bytes] | None:
 
 def _join(items: list[str]) -> str:
     return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} and {items[-1]}"
+
+
+def _history_days(check: dict) -> int:
+    first, last = str(check["first_event"])[:10], str(check["last_event"])[:10]
+    return (date.fromisoformat(last) - date.fromisoformat(first)).days
+
+
+def _churn(mapped: set, check: dict) -> str:
+    """Churn needs a signup (as Retention does) and at least 28 days of history."""
+    if "signup" not in mapped:
+        return CHURN_NO_SIGNUP
+    if _history_days(check) < CHURN_MIN_DAYS:
+        return CHURN_SHORT
+    return CHURN_OK
 
 
 def preview(mapping: dict, derive_signup: bool, check: dict) -> dict:
@@ -107,7 +126,7 @@ def preview(mapping: dict, derive_signup: bool, check: dict) -> dict:
         if "signup" in mapped
         else "needs a signup event, or the first-event option",
         "Engagement": no_activity,
-        "Churn Risk": CHURN_REASON,
+        "Churn Risk": _churn(mapped, check),
     }
 
 
@@ -246,8 +265,9 @@ def _checked_section(api: ApiClient, ctx: Context, state: dict) -> None:
     ready = (
         has_activity and confirmed and (acknowledged or not (derive and check["censor_warning"]))
     )
-    if st.button("Import", disabled=not ready):
-        st.session_state["upload_pending"] = {
+
+    def pending() -> dict:  # built from the current bytes, mapping and ticks on every click
+        return {
             "name": state["name"],
             "data": state["data"],
             "form": {
@@ -256,11 +276,15 @@ def _checked_section(api: ApiClient, ctx: Context, state: dict) -> None:
                 "acknowledge_approximate_signup": "true" if acknowledged else "false",
             },
         }
+
+    if st.button("Import", disabled=not ready):
+        st.session_state["upload_pending"] = pending()
         st.session_state["upload_failed"] = False
         _import(api)
     if st.session_state.get("upload_failed"):
         st.error(UNAVAILABLE)
-        if st.button("Retry import"):
+        if st.button("Retry import", disabled=not ready):
+            st.session_state["upload_pending"] = pending()
             _import(api)
 
 

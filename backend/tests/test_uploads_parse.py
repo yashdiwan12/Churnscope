@@ -175,3 +175,23 @@ def test_duplicate_required_header_is_rejected():
     err = rejected(f"customer_id, Customer_ID,event_name,event_timestamp\nu,v,x,{OK_TS}\n".encode())
     assert err.code == "missing_columns"
     assert err.status == 422
+
+
+NUL = chr(0)
+
+
+def test_nul_in_any_used_field_skips_the_row_without_echo(caplog):
+    caplog.set_level(logging.DEBUG)
+    parsed = parse_csv(
+        csv(
+            f"u{NUL}1,login,{OK_TS}",
+            f"u2,log{NUL}in,{OK_TS}",
+            f"u3,login,2026-01-05{NUL}",
+            "u4,login," + OK_TS,
+        ),
+        NOW,
+    )
+    assert [c for _, c in parsed.skipped if c == "invalid_character"]
+    assert list(parsed.rows["customer_id"]) == ["u4"]
+    assert all(NUL not in str(v) for v in parsed.rows.to_numpy().ravel())
+    assert NUL not in caplog.text

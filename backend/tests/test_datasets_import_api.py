@@ -345,3 +345,29 @@ def test_import_rejections_use_codes_and_never_echo(session, users):
         assert r.json()["detail"]["code"] == code
         assert "SECRET-123" not in r.text
     assert uploads_of(session, users[0]) == []
+
+
+def test_nul_byte_rows_are_skipped_on_check_and_import(session, users):
+    c = client_for(session, users[0])
+    nul = chr(0)
+    body = make_csv(10).replace("u1,login", f"u{nul}1,login", 1)
+    check = c.post(
+        "/datasets/check", files={"file": ("a.csv", io.BytesIO(body.encode()), "text/csv")}
+    )
+    assert check.status_code == 200
+    assert {"row": 5, "code": "invalid_character"} in check.json()["skipped"]
+    r = do_import(c, body)
+    assert r.status_code == 201
+    assert {"row": 5, "code": "invalid_character"} in r.json()["skipped"]
+    assert nul not in r.text
+
+
+def test_deeply_nested_mapping_is_bad_mapping(session, users):
+    c = client_for(session, users[0])
+    r = c.post(
+        "/datasets",
+        files={"file": ("a.csv", io.BytesIO(make_csv(1).encode()), "text/csv")},
+        data={"mapping": "[" * 4000 + "]" * 4000},
+    )
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "bad_mapping"

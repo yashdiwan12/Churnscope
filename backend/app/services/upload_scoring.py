@@ -121,7 +121,7 @@ def fit(events: pd.DataFrame, now: pd.Timestamp) -> dict:
         "inactive_rule"
     ]
     model_pr, rule_pr = model_m.get("pr_auc"), rule_m.get("pr_auc")
-    wins = model_pr is not None and rule_pr is not None and model_pr >= rule_pr + MARGIN
+    wins = model_pr is not None and rule_pr is not None and model_pr - rule_pr >= MARGIN - 1e-12
     out = _result("logistic" if wins else "inactive_rule", None, now, history_days)
     out["model"] = model
     out["backtest"] = {

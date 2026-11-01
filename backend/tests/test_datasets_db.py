@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from alembic import command
@@ -163,3 +164,41 @@ def test_downgrade_refuses_when_uploads_exist(engine, session):
         # Restore head whatever happened, so later tests see the full schema.
         command.upgrade(cfg, "head")
     assert session.get(Dataset, DEMO_DATASET_ID) is not None
+
+
+def test_downgrade_then_upgrade_keeps_demo_data(engine, session):
+    session.execute(text("DELETE FROM datasets WHERE kind = 'upload'"))
+    session.commit()
+    ingest_events(session, [ev(1), ev(2, customer="c2")])
+    demo_events = session.scalar(
+        select(func.count()).select_from(Event).where(Event.dataset_id == DEMO_DATASET_ID)
+    )
+    assert demo_events >= 2
+    session.rollback()  # end the read transaction so the migration can take its locks
+    cfg = Config("alembic.ini")
+    try:
+        command.downgrade(cfg, "0002")
+        command.upgrade(cfg, "head")
+    finally:
+        session.rollback()
+        command.upgrade(cfg, "head")  # whatever happened, later tests see the full schema
+    session.expire_all()
+    assert session.get(Dataset, DEMO_DATASET_ID).kind == "demo"
+    assert (
+        session.scalar(
+            select(func.count()).select_from(Event).where(Event.dataset_id == DEMO_DATASET_ID)
+        )
+        == demo_events
+    )
+    assert session.scalar(select(func.count()).select_from(Event)) == demo_events
+    # The uploads-era constraints are back: a customer id is unique per dataset, not globally.
+    owner = make_user(session)
+    upload = make_upload(session, owner)
+    session.add(
+        Customer(
+            dataset_id=upload.id,
+            external_customer_id="c1",
+            created_at=datetime(2026, 1, 5, tzinfo=UTC),
+        )
+    )
+    session.commit()

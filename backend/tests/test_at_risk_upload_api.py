@@ -340,3 +340,12 @@ def test_scoring_time_on_largest_upload(session, users, monkeypatch):
         f"(fit {timed[1]:.2f} s); first at-risk {listing:.2f} s; method {body['method']}"
     )
     assert rescore < 20
+
+
+def test_upload_churn_does_not_need_the_synthetic_model(session, users):
+    c = client_for(session, users[0])
+    ds = do_import(c, report_file(sharers=100, quiet=60)).json()["dataset"]
+    c.app.state.model_bundle = None
+    assert c.get(URL, params={"dataset_id": ds["id"]}).status_code == 200
+    assert c.get(URL).status_code == 503  # the demo still needs its model
+    assert c.get(URL, params={"dataset_id": 1}).status_code == 503

@@ -135,6 +135,12 @@ def parse_csv(raw: bytes, now: pd.Timestamp) -> ParsedFile:
     stamp_raw = df["event_timestamp"].str.strip()
     eid = df["event_id"].str.strip() if "event_id" in df.columns else pd.Series("", index=df.index)
     ts, has_zone = _timestamps(stamp_raw)
+    has_nul = (
+        cid.str.contains("\x00", regex=False)
+        | name.str.contains("\x00", regex=False)
+        | eid.str.contains("\x00", regex=False)
+        | stamp_raw.str.contains("\x00", regex=False)
+    )
     too_long = (
         (cid.str.len() > MAX_VALUE_CHARS)
         | (name.str.len() > MAX_VALUE_CHARS)
@@ -146,6 +152,7 @@ def parse_csv(raw: bytes, now: pd.Timestamp) -> ParsedFile:
     for mask, reason in (
         (out_of_range, "timestamp_out_of_range"),
         (ts.isna(), "bad_timestamp"),
+        (has_nul, "invalid_character"),
         (too_long, "value_too_long"),
         (name == "", "missing_event_name"),
         (cid == "", "missing_customer_id"),
@@ -391,7 +398,7 @@ def import_options(fields: dict[str, str]) -> tuple[dict, bool, bool]:
         raise UploadRejected("bad_mapping", "A mapping is required.")
     try:
         mapping = json.loads(raw)
-    except ValueError:  # the decoder's message can quote the field
+    except (ValueError, RecursionError):  # the decoder's message can quote the field
         raise UploadRejected("bad_mapping", "The mapping must be JSON.") from None
     if not isinstance(mapping, dict):
         raise UploadRejected("bad_mapping", "The mapping must be an object of event names.")

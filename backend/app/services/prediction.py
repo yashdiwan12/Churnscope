@@ -288,7 +288,7 @@ def _days_histogram(days: list[float]) -> list[HistogramBin]:
 
 def at_risk(
     session: Session,
-    bundle: ModelBundle,
+    bundle: ModelBundle | None,
     dataset: Dataset,
     limit: int,
     offset: int,

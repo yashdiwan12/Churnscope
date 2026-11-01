@@ -33,6 +33,10 @@ UPLOAD_CAVEAT = (
 )
 SHORT_HISTORY = "Churn scoring needs at least 28 days of history in your file."
 SCORING_FAILED = "Churn scoring failed for your file."
+NO_SIGNUP = (
+    "Churn Risk needs a signup event. "
+    'Map one of your events to signup, or re-upload with "first event counts as signup".'
+)
 UNCHECKED = "Not checked on your data: too little history."
 # Fixed copy per reason code; an unknown code shows only the label above.
 _UNCHECKED_REASONS = {
@@ -84,13 +88,13 @@ def _backtest(method: str, backtest: dict) -> None:
     st.caption(f"Method used: {_METHOD_LABELS.get(method, _METHOD_LABELS['inactive_rule'])}")
     st.caption(
         f"Measured on your history: {backtest['test_rows']:,} test rows, "
-        f"{backtest['test_churners']:,} churners"
+        f"{backtest['test_churners']:,} churners, "
+        f"PR-AUC model {_score(model['pr_auc'])} vs rule {_score(rule['pr_auc'])}"
     )
     with st.expander("How this was checked"):
         st.caption(
             f"Training: {backtest['train_rows']:,} rows, {backtest['train_churners']:,} churners"
         )
-        st.caption(f"PR-AUC: model {_score(model['pr_auc'])}, rule {_score(rule['pr_auc'])}")
         st.caption(f"ROC-AUC: model {_score(model['roc_auc'])}, rule {_score(rule['roc_auc'])}")
         st.caption(
             "The model is trained on earlier weeks of your file and tested on the latest weeks. "
@@ -124,7 +128,11 @@ def _rescore(api: ApiClient, ctx: Context) -> None:
 def _upload_unavailable(api: ApiClient, ctx: Context) -> None:
     if ctx.scoring_method == "unavailable":
         render_empty(SHORT_HISTORY)
-    elif ctx.scoring_method == "failed":
+    elif ctx.scoring_method is None and not ctx.capabilities.get("retention", True):
+        # Never scored and no signup: the same condition that switches Retention off.
+        render_empty(NO_SIGNUP)
+    elif ctx.scoring_method in ("failed", None):
+        # None with a signup means the import committed but storing the score failed: Retry.
         render_empty(SCORING_FAILED)
         if st.button("Retry scoring", key="churn_rescore"):
             _rescore(api, ctx)
@@ -187,10 +195,14 @@ def render(api: ApiClient, ctx: Context) -> None:
     st.caption(freshness_label(result["data_through"]))
     eligible = result["eligible_customers"]
     if days:
-        st.caption(
-            "Customers are ranked by days since their last activity: the longer they have been "
-            f"quiet, the more likely they stay quiet over the next {result['horizon_days']} days."
-        )
+        if result["method"] == "inactive_rule":  # the rule won a checked backtest
+            st.caption(
+                "Customers are ranked by days since their last activity: the longer they have "
+                f"been quiet, the more likely they stay quiet over the next "
+                f"{result['horizon_days']} days."
+            )
+        else:
+            st.caption("Customers are ranked by days since their last activity.")
         st.caption(f"Eligible customers ranked: {eligible:,}")
         st.caption(
             f"At risk (inactive for {result['decision_threshold']:g} or more days): "
