@@ -1,19 +1,19 @@
 # Phase 6b — Bring your own data (uploads): design
 
-Status: **draft for review (revised after external review)** · Date: 2026-11-01 · Phase: 6b · Path: architectural (new `datasets` table, migration, dataset-scoped queries and caches, upload endpoints, new UI step)
+Status: **draft for review (revised after external review; churn scoring changed to per-upload backtesting)** · Date: 2026-11-01 · Phase: 6b · Path: architectural (new `datasets` table, migration, dataset-scoped queries and caches, upload endpoints, new UI step)
 
 ## 1. Goal and understanding
 
 A signed-in, allow-listed person uploads a CSV of their own product-activity events and sees the same dashboard (Overview, Funnel, Retention, Engagement) plus a churn-risk report for **their file only**. Nobody else can see it. The demo data stays available.
 
-Said by the user: audience is anyone allowed to sign in; uploads come after the dashboard; the churn report scores the uploaded customers with the **existing model** (labelled as an estimate); CSVs use **fixed columns plus an event-name mapping step**; **one dataset per user**, replaceable and deletable; files with no signup event may use **"first event counts as signup"**.
+Said by the user: audience is anyone allowed to sign in; uploads come after the dashboard; the churn report on an upload is **trained and tested on that file's own history**, with the simple inactivity rule as a competitor, and is built as the **last, separable task** (this replaces the earlier choice of scoring with the shipped synthetic-data model); CSVs use **fixed columns plus an event-name mapping step**; **one dataset per user**, replaceable and deletable; files with no signup event may use **"first event counts as signup"**.
 
-Not in scope: training a model per upload, arbitrary column mapping, several datasets per user, sharing a dataset with another user, saved views, scheduled refresh, non-CSV formats.
+Not in scope: using the shipped synthetic-data model on uploads, a user-chosen churn horizon (fixed at 14 days for now), per-customer explanations, arbitrary column mapping, several datasets per user, sharing a dataset with another user, saved views, scheduled refresh, non-CSV formats.
 
 ## 2. Assumptions
 
 - **A1.** Uploaded data may contain real customer identifiers. It is private to its owner, deletable, never logged.
-- **A2.** The churn model was trained on synthetic data and cannot be validated on an upload (there are no labels). Scores are estimates, and the UI says so.
+- **A2.** An upload has no churn labels, but its own history does: "no qualifying activity in the 14 days after a date" can be observed for every past date whose 14 days lie inside the file. That is the same label the shipped model uses, so the same pipeline can train and test on the upload. Results measured this way show the method worked on the file's recent past, not that it will keep working.
 - **A3.** The free Supabase tier is small (500 MB shared), so limits are tight (section 5).
 - **A4.** The allow-list keeps the user count small; limits still hold per user and globally.
 
@@ -29,11 +29,14 @@ Not in scope: training a model per upload, arbitrary column mapping, several dat
 | D6 | "First event counts as signup" **derives a `signup` event** per customer lacking one, at their first mapped event's time (`properties.derived = true`), only when no event is mapped to `signup` | Retention, funnel and churn features all need `signup` (features drop customers without one); no metric code changes |
 | D6a | **Left-censoring guard for the derived rule.** A customer who really joined before the file starts gets a derived signup at the file's start, which inflates the first cohort, "new users" and makes `account_age_days` mean "days since the file began". Fix chosen: the check step computes the share of customers whose first event falls in the file's first 7 days; **at 50% or more it shows a red warning and the user must tick "I understand signup dates are approximate"** before the import button works. Afterwards, Overview (new users), Retention (first cohort) and Churn Risk (account age is unreliable) each carry a fixed note saying so. Excluding the first-week cohort from the heatmap is deferred | Stops the silent misreading without changing metric code |
 | D7 | Existing analytics and churn routes gain an optional `dataset_id` query parameter, default demo (1) | Backward compatible |
+| D9 | **Churn scoring on an upload is learned from the file itself** (section 5a): weekly cutoffs, features from the 28 days before each, labels from the 14 days after, time-based train/test split with a purge gap, logistic regression against the days-since-last-activity rule on the same test; the better one scores today's customers. The demo dataset keeps the shipped model | The score is measured on the user's own data instead of borrowed from synthetic data; almost all code already exists (`features.make_cutoffs`, `build_features`, `build_labels`, `split_by_cutoff`, `train.make_logistic`, `evaluate.baseline_metrics`) |
+| D10 | The fitted model is stored as **plain numbers in JSON** (feature names, scaler means and scales, coefficients, intercept, threshold) on the dataset row, never as a pickle | Loading it cannot run code; deleting the dataset deletes it; inference is a dot product |
+| D11 | Churn on uploads is the **last task** and can be dropped without touching the others | The analytics on uploads are valuable on their own and ship first |
 | D8 | Whole file rejected if more than 5% of rows are invalid; otherwise valid rows import and up to 20 skip reasons are shown. **Denominator:** rows whose event name is mapped to "ignore" and duplicate rows are left out of both the invalid count and the denominator, so unmapping a noisy event name cannot get a file rejected | One bad row must not block a large file; a mostly broken file must not import silently |
 
 ## 4. Data model (migration `0003_datasets`)
 
-- `datasets`: `id` bigint PK · `owner_id` uuid NULL FK to `user_profiles` (NULL = demo) · `kind` text CHECK in (`demo`, `upload`) · `name` text · `source_filename` text NULL · `signup_rule` text CHECK in (`event`, `derived_from_first_event`) · `mapping` jsonb · `mapped_counts` jsonb (rows per our event name) · `customer_count` int · `event_count` int · `data_through` timestamptz NULL · `created_at`. A **partial unique index on `owner_id` where `kind = 'upload'`** allows at most one upload per user. Row 1 is the demo dataset, created by the migration.
+- `datasets`: `id` bigint PK · `owner_id` uuid NULL FK to `user_profiles` (NULL = demo) · `kind` text CHECK in (`demo`, `upload`) · `name` text · `source_filename` text NULL · `signup_rule` text CHECK in (`event`, `derived_from_first_event`) · `mapping` jsonb · `mapped_counts` jsonb (rows per our event name) · `customer_count` int · `event_count` int · `data_through` timestamptz NULL · `scoring` jsonb NULL (method, reason, fitted numbers, test metrics; section 5a) · `created_at`. A **partial unique index on `owner_id` where `kind = 'upload'`** allows at most one upload per user. Row 1 is the demo dataset, created by the migration.
 - `datasets.owner_id` references `user_profiles` ON DELETE CASCADE (removing a profile removes its upload; deleting profiles is not automated yet).
 - `customers.dataset_id` and `events.dataset_id`: NOT NULL FK to `datasets` ON DELETE CASCADE; existing rows backfilled to 1.
 - Constraints: replace the global uniques with `unique(dataset_id, external_customer_id)` and `unique(dataset_id, event_id)`; add `unique(dataset_id, id)` on `customers` (required as the target of the composite FK); a composite FK `events(dataset_id, customer_id)` to `customers(dataset_id, id)` so an event can never point at another dataset's customer. Indexes lead with `dataset_id`: `(dataset_id, customer_id, event_timestamp)`, `(dataset_id, event_name, event_timestamp)` and `(dataset_id, id)` on `events` (for the newest-event-id lookup).
@@ -51,6 +54,7 @@ Not in scope: training a model per upload, arbitrary column mapping, several dat
 | POST | `/datasets/check` | Multipart form: `file`; stores nothing; returns rows, customers, time range, event names with counts, suggested mapping, skipped rows (count, first 20 reasons), the timestamp assumption |
 | POST | `/datasets` | Multipart form: `file`, `mapping` (JSON string), `derive_signup`, `acknowledge_approximate_signup`; imports and replaces; returns the dataset |
 | DELETE | `/datasets/{id}` | Own upload only; demo or someone else's is a 404 |
+| POST | `/datasets/{id}/score` | Own upload only; (re)runs section 5a and stores `scoring`; used after import and as Retry if scoring failed |
 | existing | analytics, churn | `?dataset_id=`; a dependency checks visibility (demo or owned), else 404 |
 
 Limits (constants in one module): request body at most 5.5 MB (411 without Content-Length, 413 over; checked before parsing) and the file part at most 5 MB, read in chunks and stopped at the limit; the app adds `python-multipart`; the Streamlit uploader sets `server.maxUploadSize = 5` in `frontend/.streamlit/config.toml` so oversize files are refused in the browser; these routes use a 422 handler that never echoes the input (a validation error cannot send the user's data back or into logs); at most 50,000 event rows; at most 10,000 customers; at most 50 distinct event names; a global cap on uploaded events (default 300,000), over which import returns 409 "storage full" (checked inside the same import lock as the insert, so two simultaneous imports cannot both pass). Auth is `current_user`, as on other routes. The 5 MB, 50,000-row and 10,000-customer figures are provisional until the real-database timing below.
@@ -59,7 +63,30 @@ Limits (constants in one module): request body at most 5.5 MB (411 without Conte
 
 **Mapping.** `{their_name: our_name or null}` with `our_name` in `EVENT_NAMES`; many-to-one is allowed; at least one target must be in `QUALIFYING_EVENTS`, else the import is refused. The suggestion matches by normalised name (lower case, spaces and hyphens to underscores). `derive_signup` is accepted only when nothing maps to `signup`.
 
-**Capabilities** (computed from `mapped_counts` and `signup_rule`): Overview and Engagement always; Retention needs `signup` (mapped or derived); Funnel needs every step in `metrics.FUNNEL_STEPS` (read from there, not listed here), else it names the missing steps; Churn needs a signup too and shows the existing empty state if no customer is eligible.
+**Capabilities** (computed from `mapped_counts` and `signup_rule`): Overview and Engagement always; Retention needs `signup` (mapped or derived); Funnel needs every step in `metrics.FUNNEL_STEPS` (read from there, not listed here), else it names the missing steps; Churn depends on `scoring.method` (section 5a) and needs a signup too; it shows the existing empty state if no customer is eligible.
+
+## 5a. Churn scoring on an upload
+
+Runs after the import commits, in its own transaction (a failure leaves the dataset intact with `scoring.method = "failed"` and a Retry). Steps:
+
+1. **Cutoffs.** `features.make_cutoffs` over the upload (weekly, midnight UTC, each with a fully observed 14-day label horizon), keeping at most the latest 26 to bound training time.
+2. **Split.** `features.split_by_cutoff` with **2 test cutoffs** (the shipped model uses 4; 2 lowers the history needed). Train cutoffs end at least 14 days before the first test cutoff, so no training label overlaps the test period.
+3. **Features and labels.** `build_features` and `build_labels`, unchanged, on the upload's events.
+4. **Fit.** `train.make_logistic(seed=42)` on the training rows.
+5. **Compete.** On the test rows compute PR-AUC and ROC-AUC for the model and for the rule (`evaluate.baseline_metrics`, rule = days since last activity, at risk at 7 days or more). The model wins only if its PR-AUC beats the rule's by at least 0.02; otherwise the rule wins. Either way both results are stored and shown.
+6. **Score now.** At the dataset's default cutoff (as for the demo), eligible customers are scored by the winner. Model: probability and class at the stored threshold. Rule: days since last activity and an at-risk flag; the list shows days, not a probability, and the histogram buckets days.
+
+Floors (constants), checked in order:
+
+| Result | Condition | Page shows |
+|---|---|---|
+| `logistic` or `inactive_rule` (checked) | the split succeeds; at least 200 test rows; at least 20 churners and 20 non-churners in the test; at least 20 churners in training | the winner's ranking plus "Measured on your history: n test rows, k churners, PR-AUC model vs rule" |
+| `rule_unchecked` | not enough for a test, but at least 28 days of history (one feature window) | ranking by days since last activity, labelled "not checked on your data: too little history" with what is missing |
+| `unavailable` | less than 28 days | a fixed message naming the missing history |
+
+Roughly 9 weeks of history are needed for a checked result (28-day window, 14-day horizon, a train cutoff, a 14-day purge gap and 2 test weeks). The page always shows the counts behind any number. "Churn" here means inactivity for 14 days, not cancellation, and the page says so.
+
+Training time is part of the budget: the plan's scoring task measures it on a 50,000-event, 10,000-customer file and keeps it under 20 s, reducing the cutoff count if needed.
 
 ## 6. Flow
 
@@ -81,12 +108,12 @@ sequenceDiagram
     UI-->>U: switch to My data
 ```
 
-UI: a sidebar **Data** selector (Demo data, My data), default Demo. An **Upload data** page (template download, notice, check, mapping, replace confirmation, import, delete). A banner that follows the selection: demo keeps the current text; My data says "Your uploaded data: <filename>, private to you". Pages whose capability is missing show a fixed message naming what is missing. A 404 for the selected dataset falls back to Demo with a notice. On the Churn Risk page for My data, the evaluation block is labelled "measured on the synthetic test set", and a notice states the model was trained on synthetic data and not measured on this file. Retention and Funnel carry a note when the signup is derived (see D6a). The upload notice says: "Your file is kept until you delete it or your access is removed. Do not upload personal data you are not allowed to share." The dataset selector is checked against a fresh `GET /datasets` on every rerun (like `/me`), so a deleted or replaced dataset id is never read from cache.
+UI: a sidebar **Data** selector (Demo data, My data), default Demo. An **Upload data** page (template download, notice, check, mapping, replace confirmation, import, delete). A banner that follows the selection: demo keeps the current text; My data says "Your uploaded data: <filename>, private to you". Pages whose capability is missing show a fixed message naming what is missing. A 404 for the selected dataset falls back to Demo with a notice. On the Churn Risk page for My data, the evaluation block shows the backtest on the user's own history (method used, test rows, churners, PR-AUC and ROC-AUC for the model and for the rule) or the reason it could not be checked; the synthetic model's metrics never appear for an upload. Retention and Funnel carry a note when the signup is derived (see D6a). The upload notice says: "Your file is kept until you delete it or your access is removed. Do not upload personal data you are not allowed to share." The dataset selector is checked against a fresh `GET /datasets` on every rerun (like `/me`), so a deleted or replaced dataset id is never read from cache.
 
 ## 7. Caches
 
 - Frontend `data.py`: every cached call keys on `dataset_id` and the signed-in user id (new parameters on each function); the `_api` argument stays excluded.
-- Backend churn-list cache: for the demo dataset the key becomes `(1, model_version, cutoff, max(events.id) for dataset 1)`; an upload never changes (a replace creates a new id), so its key is just `(dataset_id, model_version, cutoff)` with no per-request query. Bounded to 4 entries (oldest evicted).
+- Backend churn-list cache: for the demo dataset the key becomes `(1, model_version, cutoff, max(events.id) for dataset 1)`; an upload never changes (a replace creates a new id), so its key is `(dataset_id, scoring fitted-at timestamp, cutoff)` with no per-request query; re-scoring changes the timestamp. Bounded to 4 entries (oldest evicted).
 - **On delete or import** the backend evicts that dataset's cache entries (the scored rows hold external customer ids) and the acting session calls `st.cache_data.clear()`. Other browser sessions of the same user cannot resurrect deleted data because of the fresh dataset check above. Tests assert both caches are empty after a delete.
 - `latest_event_id`, `data_through`, `resolve_customers`, `customer_external_ids` and every analytics repository function take `dataset_id`.
 
@@ -104,6 +131,8 @@ UI: a sidebar **Data** selector (Demo data, My data), default Demo. An **Upload 
 | Check endpoint parses up to 5 MB with no rate limit | accepted behind the allow-list; size caps and chunked read bound the cost | boundary test; revisit in Phase 7 |
 | Deleted data lingering in caches | eviction on delete and import; fresh dataset check | both caches asserted empty |
 | Validation error echoing the user's file | custom 422 handler without input | test with a malformed upload |
+| Loading a stored model runs code | fitted numbers stored as JSON, applied by a dot product; no pickle or joblib for uploads | test that `scoring` holds only numbers and names, and inference matches scikit-learn |
+| Overstating churn accuracy | backtest on the file's own later weeks; floors; counts always shown; the rule competes and wins ties | floor and winner-selection tests |
 | Personal data | notice on the upload step; delete really deletes (cascade); no extra columns stored | delete test counts rows |
 
 ## 9. Failure behaviour
@@ -132,6 +161,7 @@ Invalid CSV, missing columns and over-limit files return fixed 4xx messages with
 - Capabilities for several mapping shapes.
 - Hand-checked metrics on a small uploaded file equal the same events loaded as demo.
 - Frontend: selector, banner, notices, 404 fallback.
+- Scoring: on a hand-built file where the churners are the customers who go quiet, both methods rank them first; the purge gap leaves no training label inside the test period; the 0.02 margin picks the rule on a tie and the model on a clear win; each floor at and just below its limit gives the right method; the JSON model's probabilities equal scikit-learn's to 1e-9; a scoring failure leaves the dataset intact and Retry works; the synthetic model's metrics never appear for an upload; the rule view shows days, not a probability.
 
 ## 11. Plan outline (for the plan document)
 
@@ -142,9 +172,11 @@ Invalid CSV, missing columns and over-limit files return fixed 4xx messages with
 4. Import (mapping, derived signup, transaction, caps), list and delete endpoints.
 5. Frontend: data selector, dataset-keyed caches, banner and notices.
 6. Frontend: Upload data page.
-7. Docs, `scripts/purge_uploads.py --older-than N` (manual admin script, by import date), progress, whole-branch review, real run-through with three files: one with no signup event, one with a timestamp column without a timezone, and one that starts mid-history (to see the D6a warning).
+7. Churn on uploads: section 5a (scoring service, JSON model, floors, score endpoint), the churn route and page for uploads, timing check. Separable: if dropped, Churn shows "not available for uploaded data yet".
+8. Docs, `scripts/purge_uploads.py --older-than N` (manual admin script, by import date), progress, whole-branch review, real run-through with three files: one with no signup event, one with a timestamp column without a timezone, and one that starts mid-history (to see the D6a warning).
 
 ## 12. Open points
 
 - Limits (5 MB, 50,000 rows, 10,000 customers) are provisional until task 0 times a real import. The 300,000-event global cap is backed by the size measurement in section 4 and is re-measured before deploy (Phase 7).
+- The 0.02 PR-AUC margin and the floors (200 test rows, 20 per class) are judgement calls; revisit them after the real run-through.
 - No automatic expiry in 6b. The upload notice says so, and a manual purge script covers the gap. Automatic expiry can wait for Phase 7.
