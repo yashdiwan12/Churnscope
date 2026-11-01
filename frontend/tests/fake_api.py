@@ -132,6 +132,8 @@ def context_for(row=None, user_id=ME_OK["id"]):
         signup_rule=row["signup_rule"],
         capabilities=row["capabilities"],
         scoring_method=row["scoring_method"],
+        upload_id=row["id"] if row["kind"] == "upload" else None,
+        upload_name=row["name"] if row["kind"] == "upload" else None,
     )
 
 
@@ -148,7 +150,8 @@ def install(monkeypatch, routes: dict[str, tuple[int, dict | list | None]]) -> R
         key = f"{method} {path}" if f"{method} {path}" in routes else path  # method-specific first
         if key not in routes:
             raise AssertionError(f"unexpected request to {method} {path}")
-        status, body = routes[key]
+        route = routes[key]
+        status, body = route() if callable(route) else route  # callable: state-dependent
         if isinstance(body, Exception):
             raise body
         return httpx.Response(status, json=body, request=httpx.Request(method, url))

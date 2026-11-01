@@ -28,6 +28,8 @@ class Context:
     signup_rule: str
     capabilities: dict
     scoring_method: str | None
+    upload_id: int | None = None  # the caller's own upload, whichever dataset is selected
+    upload_name: str | None = None
 
     @property
     def derived_signup(self) -> bool:
@@ -68,6 +70,7 @@ def select(api: ApiClient, me: dict) -> Context:
         key="dataset_id",
     )
     row = by_id[chosen]
+    own = next((r for r in by_id.values() if r["kind"] == "upload"), None)
     return Context(
         dataset_id=row["id"],
         user_id=me["id"],
@@ -76,4 +79,6 @@ def select(api: ApiClient, me: dict) -> Context:
         signup_rule=row["signup_rule"],
         capabilities=row["capabilities"],
         scoring_method=row["scoring_method"],
+        upload_id=None if own is None else own["id"],
+        upload_name=None if own is None else own["name"],
     )

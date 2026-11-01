@@ -233,10 +233,12 @@ def _checked_section(api: ApiClient, ctx: Context, state: dict) -> None:
     for page_title, reason in preview(mapping, derive, check).items():
         st.markdown(f"- {page_title}: {'will work' if reason is None else reason}")
 
-    replacing = ctx.kind == "upload"
+    replacing = ctx.upload_id is not None
     confirmed = True
     if replacing:
-        st.caption("Importing replaces your current upload.")
+        st.caption(
+            f"Importing replaces your current upload, {escape_markdown(ctx.upload_name or '')}."
+        )
         confirmed = st.checkbox(REPLACE_LABEL, key=f"upload_replace_{state['n']}")
     has_activity = bool(
         {target for target in mapping.values() if target} & set(check["qualifying_events"])
@@ -268,7 +270,7 @@ def _delete_section(api: ApiClient, ctx: Context) -> None:
     confirmed = st.checkbox(DELETE_LABEL, key="upload_delete_confirm")
     if st.button("Delete my data", disabled=not confirmed):
         try:
-            api.delete(f"/datasets/{ctx.dataset_id}")
+            api.delete(f"/datasets/{ctx.upload_id}")
         except (ApiError, NotAllowed, NotSignedIn, ServiceUnavailable) as exc:
             render_error(exc, retry_key="upload_delete_retry")
             return
@@ -300,5 +302,5 @@ def render(api: ApiClient, ctx: Context) -> None:
         state = st.session_state.get("upload_check")
     if state:
         _checked_section(api, ctx, state)
-    if ctx.kind == "upload":
+    if ctx.upload_id is not None:
         _delete_section(api, ctx)

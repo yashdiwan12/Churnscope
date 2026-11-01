@@ -116,6 +116,15 @@ def checked(monkeypatch, check=CHECK_OK, datasets=DATASETS_DEMO_ONLY, extra=None
     return at, requested
 
 
+def after(requested, method, listing, before=DATASETS_DEMO_ONLY):
+    """The dataset listing: `before` until a request with `method` succeeded, then `listing`."""
+    done = any(
+        m == method and p.startswith("/datasets") and p != "/datasets/check"
+        for m, p, _ in requested.calls
+    )
+    return listing if done else before
+
+
 def posts(requested, path="/datasets"):
     return [kwargs for method, p, kwargs in requested.calls if method == "POST" and p == path]
 
@@ -247,7 +256,7 @@ def test_import_success_switches_dataset_and_clears_cache(monkeypatch):
 
     cached()
     at, requested = checked(monkeypatch, extra={"POST /datasets": (201, IMPORT_OK)})
-    at.routes["/datasets"] = DATASETS_WITH_UPLOAD  # the list after the import
+    at.routes["/datasets"] = lambda: after(requested, "POST", DATASETS_WITH_UPLOAD)
     click(at, "Import")
     [sent] = posts(requested)
     assert sent["files"]["file"] == FILE
@@ -272,7 +281,7 @@ def test_derived_signups_in_summary_and_flags_sent(monkeypatch):
     )
     tick(at, DERIVE)
     tick(at, ACK)
-    at.routes["/datasets"] = DATASETS_WITH_UPLOAD
+    at.routes["/datasets"] = lambda: after(requested, "POST", DATASETS_WITH_UPLOAD)
     click(at, "Import")
     [sent] = posts(requested)
     assert sent["data"]["derive_signup"] == "true"
@@ -341,7 +350,7 @@ def test_import_timeout_offers_retry_with_same_bytes(monkeypatch):
     click(at, "Import")
     assert "The service is unavailable. Please try again shortly." in texts(at)
     at.routes["POST /datasets"] = (201, IMPORT_OK)
-    at.routes["/datasets"] = DATASETS_WITH_UPLOAD
+    at.routes["/datasets"] = lambda: after(requested, "POST", DATASETS_WITH_UPLOAD)
     click(at, "Retry import")
     first, second = posts(requested)
     assert first["files"]["file"] == second["files"]["file"] == FILE
@@ -362,6 +371,9 @@ def test_delete_requires_confirmation_and_falls_back_to_demo(monkeypatch):
     at, requested = page(
         monkeypatch, {"DELETE /datasets/7": (204, None)}, DATASETS_WITH_UPLOAD, file=None
     )
+    at.routes["/datasets"] = lambda: after(
+        requested, "DELETE", DATASETS_DEMO_ONLY, DATASETS_WITH_UPLOAD
+    )
     at.session_state["dataset_id"] = 7
     run(at)
     assert button(at, "Delete my data").disabled
@@ -374,6 +386,31 @@ def test_delete_requires_confirmation_and_falls_back_to_demo(monkeypatch):
     shown = texts(at)
     assert "Your data was deleted." in shown
     assert not any(b.label == "Delete my data" for b in at.button)
+
+
+def test_replace_confirmation_required_with_demo_selected(monkeypatch):
+    at, _ = checked(monkeypatch, datasets=DATASETS_WITH_UPLOAD, dataset_id=1)
+    assert "replaces your current upload, events.csv" in texts(at)
+    assert button(at, "Import").disabled
+    tick(at, REPLACE)
+    assert not button(at, "Import").disabled
+
+
+def test_delete_from_demo_uses_the_upload_id(monkeypatch):
+    at, requested = page(
+        monkeypatch, {"DELETE /datasets/7": (204, None)}, DATASETS_WITH_UPLOAD, file=None
+    )
+    at.routes["/datasets"] = lambda: after(
+        requested, "DELETE", DATASETS_DEMO_ONLY, DATASETS_WITH_UPLOAD
+    )
+    run(at)
+    assert at.session_state["dataset_id"] == 1
+    assert button(at, "Delete my data").disabled
+    tick(at, DELETE_CONFIRM)
+    click(at, "Delete my data")
+    assert ("DELETE", "/datasets/7") in [(m, p) for m, p, _ in requested.calls]
+    assert at.session_state["dataset_id"] == 1
+    assert "Your data was deleted." in texts(at)
 
 
 def test_delete_not_offered_on_demo(monkeypatch):
