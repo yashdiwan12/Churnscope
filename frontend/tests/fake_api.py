@@ -224,11 +224,17 @@ def _risk_row(rank, customer_id, score, predicted_class):
         "rank": rank,
         "customer_id": customer_id,
         "risk_score": score,
+        "days_inactive": None,
         "predicted_class": predicted_class,
     }
 
 
 AT_RISK_OK = {
+    "dataset_id": 1,
+    "method": "shipped_model",
+    "reason": None,
+    "histogram_unit": "risk_score",
+    "backtest": None,
     "model_version": "churn-lr-e330fa34d3",
     "cutoff": "2026-10-30T00:00:00+00:00",
     "data_through": "2026-10-30T18:00:00+00:00",

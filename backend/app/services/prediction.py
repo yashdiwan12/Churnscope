@@ -2,6 +2,7 @@
 
 import threading
 from collections import OrderedDict
+from collections.abc import Callable
 
 import pandas as pd
 from sqlalchemy.orm import Session
@@ -11,6 +12,7 @@ from app.db.datasets import DEMO_DATASET_ID
 from app.db.models import Dataset
 from app.ml.artifact import ModelBundle
 from app.schemas.churn import (
+    UPLOAD_CAVEAT,
     AtRiskOut,
     AtRiskRow,
     AtRiskSort,
@@ -19,7 +21,7 @@ from app.schemas.churn import (
     HistogramBin,
     PredictResponse,
 )
-from app.services import features
+from app.services import features, upload_scoring
 
 CAVEAT = (
     "Risk scores are estimates from a model trained on synthetic data. They are relative scores "
@@ -32,7 +34,7 @@ _NOT_ELIGIBLE = (
 
 
 class ScoringUnavailable(Exception):
-    """The dataset cannot be scored (uploads are not scoreable yet)."""
+    """The dataset cannot be scored: an upload whose scoring is missing, unavailable or failed."""
 
 
 def default_cutoff(session: Session, dataset_id: int = DEMO_DATASET_ID) -> pd.Timestamp | None:
@@ -116,25 +118,78 @@ def predict(
 
 # ----------------------------------------------------------------------------- ranked list
 _BINS = 10
-# Scored frames keyed by (dataset id, model_version, cutoff, latest event id). The key uses the
-# highest event id, not the latest timestamp: a late event with an old timestamp leaves
-# max(timestamp) unchanged but always raises max(id), so the list can never go stale.
-# Bounded to _CACHE_MAX entries; the least recently used entry is evicted first.
+_DAY_BIN = 7  # the rule's histogram: 4 bins of 7 days over [0, 28)
+_DAY_BINS = features.WINDOW_DAYS // _DAY_BIN
+# Scored frames. Demo key: (dataset id, model_version, cutoff, latest event id); the highest event
+# id, not the latest timestamp, so a late event with an old timestamp still invalidates. Upload
+# key: (dataset id, scoring fitted_at, cutoff): an upload's rows never change (a replace makes a
+# new dataset) and re-scoring changes fitted_at. Bounded to _CACHE_MAX entries, least recently
+# used evicted first.
+#
+# Scoring runs outside the global lock, so one slow run never blocks cache hits for other
+# datasets; a per-key lock stops two requests for the same key scoring twice. An eviction while
+# a run is in flight bumps _generation, and the stale result is then returned but not cached.
 _CACHE_MAX = 4
 _cache_lock = threading.Lock()
 _cache: OrderedDict[tuple, pd.DataFrame] = OrderedDict()
+_key_locks: dict[tuple, threading.Lock] = {}
+_generation = 0
 
 
 def clear_at_risk_cache() -> None:
+    global _generation
     with _cache_lock:
         _cache.clear()
+        _generation += 1
 
 
 def evict_dataset(dataset_id: int) -> None:
     """Drop every cached list for one dataset (call when its rows change or it is deleted)."""
+    global _generation
     with _cache_lock:
         for key in [k for k in _cache if k[0] == dataset_id]:
             del _cache[key]
+        _generation += 1
+
+
+def _cached(key: tuple, compute: Callable[[], pd.DataFrame]) -> pd.DataFrame:
+    with _cache_lock:
+        if key in _cache:
+            _cache.move_to_end(key)
+            return _cache[key]
+        key_lock = _key_locks.setdefault(key, threading.Lock())
+    with key_lock:
+        with _cache_lock:
+            if key in _cache:  # another request scored it while this one waited
+                _cache.move_to_end(key)
+                return _cache[key]
+            generation = _generation
+        try:
+            frame = compute()
+        finally:
+            with _cache_lock:
+                if _key_locks.get(key) is key_lock:
+                    del _key_locks[key]
+        with _cache_lock:
+            if generation == _generation:
+                _cache[key] = frame
+                while len(_cache) > _CACHE_MAX:
+                    _cache.popitem(last=False)
+        return frame
+
+
+def _ranked(session: Session, dataset_id: int, raw: pd.Series, column: str) -> pd.DataFrame:
+    """External ids plus ``column`` rounded to 4 places, value descending then id ascending."""
+    if raw.empty:
+        return pd.DataFrame({"customer_id": pd.Series(dtype=str), column: pd.Series(dtype=float)})
+    pks = [int(p) for p in raw.index]
+    names = repositories.customer_external_ids(session, dataset_id, pks)
+    frame = pd.DataFrame(
+        {"customer_id": [names[p] for p in pks], column: [round(float(v), 4) for v in raw]}
+    )
+    return frame.sort_values([column, "customer_id"], ascending=[False, True]).reset_index(
+        drop=True
+    )
 
 
 def score_all(
@@ -145,35 +200,38 @@ def score_all(
     Columns ``customer_id`` (external id) and ``risk_score`` (rounded to 4 places), sorted by
     score descending then id ascending. Empty when nobody is eligible.
     """
-    empty = pd.DataFrame(
-        {"customer_id": pd.Series(dtype=str), "risk_score": pd.Series(dtype=float)}
-    )
     raw = _score_frame(bundle, repositories.load_events(session, dataset_id, until=cutoff), cutoff)
-    if raw.empty:
-        return empty
-    pks = [int(p) for p in raw.index]
-    names = repositories.customer_external_ids(session, dataset_id, pks)
-    frame = pd.DataFrame(
-        {"customer_id": [names[p] for p in pks], "risk_score": [round(float(v), 4) for v in raw]}
+    return _ranked(session, dataset_id, raw, "risk_score")
+
+
+def score_upload(session: Session, dataset: Dataset, cutoff: pd.Timestamp) -> pd.DataFrame:
+    """An upload's eligible customers at ``cutoff``, ranked by its stored scoring method.
+
+    ``logistic``: column ``risk_score`` from the stored JSON model. The rule methods: column
+    ``days_inactive`` (days since last activity), most days first.
+    """
+    scoring = dataset.scoring or {}
+    x = features.build_features(
+        repositories.load_events(session, dataset.id, until=cutoff), [cutoff]
     )
-    return frame.sort_values(["risk_score", "customer_id"], ascending=[False, True]).reset_index(
-        drop=True
-    )
+    ids = x.index.get_level_values("customer_id")
+    if scoring.get("method") == "logistic":
+        values = upload_scoring.json_proba(scoring["model"], x) if len(x) else []
+        return _ranked(session, dataset.id, pd.Series(values, index=ids, dtype=float), "risk_score")
+    days = x["days_since_last_activity"].to_numpy(dtype=float)
+    return _ranked(session, dataset.id, pd.Series(days, index=ids, dtype=float), "days_inactive")
 
 
 def _scored(
     session: Session, bundle: ModelBundle, dataset_id: int, cutoff: pd.Timestamp
 ) -> pd.DataFrame:
     key = (dataset_id, bundle.version, cutoff, repositories.latest_event_id(session, dataset_id))
-    with _cache_lock:
-        if key in _cache:
-            _cache.move_to_end(key)
-            return _cache[key]
-        frame = score_all(session, bundle, dataset_id, cutoff)
-        _cache[key] = frame
-        while len(_cache) > _CACHE_MAX:
-            _cache.popitem(last=False)
-        return frame
+    return _cached(key, lambda: score_all(session, bundle, dataset_id, cutoff))
+
+
+def _scored_upload(session: Session, dataset: Dataset, cutoff: pd.Timestamp) -> pd.DataFrame:
+    key = (dataset.id, dataset.scoring["fitted_at"], cutoff)
+    return _cached(key, lambda: score_upload(session, dataset, cutoff))
 
 
 def _evaluation(bundle: ModelBundle) -> Evaluation:
@@ -191,17 +249,41 @@ def _evaluation(bundle: ModelBundle) -> Evaluation:
     )
 
 
-def _sorted_positions(scored: pd.DataFrame, sort: AtRiskSort) -> list[int]:
-    """Row positions of the rank-ordered ``scored`` frame (position + 1 == rank) in ``sort`` order."""
+def _sorted_positions(scored: pd.DataFrame, sort: AtRiskSort, column: str) -> list[int]:
+    """Row positions of the rank-ordered ``scored`` frame (position + 1 == rank) in ``sort`` order.
+
+    ``column`` is the ranking value (risk score or days inactive); higher means more at risk.
+    """
     n = len(scored)
     if sort == "risk_desc":
         return list(range(n))
     if sort == "customer_asc":
         ids = scored["customer_id"].tolist()
         return sorted(range(n), key=ids.__getitem__)
-    # risk_asc: score ascending, ties by customer id ascending (rank order breaks ties descending).
-    ids, risk = scored["customer_id"], scored["risk_score"]
-    return sorted(range(n), key=lambda i: (risk.iloc[i], ids.iloc[i]))
+    # risk_asc: value ascending, ties by customer id ascending (rank order breaks ties descending).
+    ids, value = scored["customer_id"], scored[column]
+    return sorted(range(n), key=lambda i: (value.iloc[i], ids.iloc[i]))
+
+
+def _score_histogram(scores: list[float]) -> list[HistogramBin]:
+    # Integer arithmetic on the rounded scores: float bin edges would misplace 0.3, 0.7, etc.
+    counts = [0] * _BINS
+    for s in scores:
+        counts[min(round(s * 10000) // 1000, _BINS - 1)] += 1
+    return [
+        HistogramBin(bin_start=i / _BINS, bin_end=(i + 1) / _BINS, count=c)
+        for i, c in enumerate(counts)
+    ]
+
+
+def _days_histogram(days: list[float]) -> list[HistogramBin]:
+    counts = [0] * _DAY_BINS
+    for d in days:
+        counts[min(round(d * 10000) // (_DAY_BIN * 10000), _DAY_BINS - 1)] += 1
+    return [
+        HistogramBin(bin_start=i * _DAY_BIN, bin_end=(i + 1) * _DAY_BIN, count=c)
+        for i, c in enumerate(counts)
+    ]
 
 
 def at_risk(
@@ -212,51 +294,67 @@ def at_risk(
     offset: int,
     sort: AtRiskSort = "risk_desc",
 ) -> AtRiskOut:
-    if dataset.kind != "demo":
+    """The ranked list for a dataset: the shipped model for the demo, the upload's own scoring
+    method otherwise. ScoringUnavailable when an upload has no usable scoring yet."""
+    scoring = dataset.scoring or {}
+    if dataset.kind == "demo":
+        method, column = "shipped_model", "risk_score"
+        threshold = bundle.threshold
+    elif scoring.get("method") in upload_scoring.SCOREABLE:
+        method = scoring["method"]
+        column = "risk_score" if method == "logistic" else "days_inactive"
+        threshold = (
+            float(scoring["model"]["threshold"])
+            if method == "logistic"
+            else upload_scoring.RULE_DAYS
+        )
+    else:
         raise ScoringUnavailable(dataset.id)
-    cutoff = default_cutoff(session, dataset.id)
-    scored = _scored(session, bundle, dataset.id, cutoff) if cutoff is not None else None
-    scores = [] if scored is None else scored["risk_score"].tolist()
 
-    # Integer arithmetic on the rounded scores: float bin edges would misplace 0.3, 0.7, etc.
-    counts = [0] * _BINS
-    for s in scores:
-        counts[min(round(s * 10000) // 1000, _BINS - 1)] += 1
-    histogram = [
-        HistogramBin(bin_start=i / _BINS, bin_end=(i + 1) / _BINS, count=c)
-        for i, c in enumerate(counts)
-    ]
+    cutoff = default_cutoff(session, dataset.id)
+    scored = None
+    if cutoff is not None:
+        if dataset.kind == "demo":
+            scored = _scored(session, bundle, dataset.id, cutoff)
+        else:
+            scored = _scored_upload(session, dataset, cutoff)
+    values = [] if scored is None else scored[column].tolist()
+    histogram = _score_histogram(values) if column == "risk_score" else _days_histogram(values)
 
     rows = []
     if scored is not None:
         # ``scored`` is in rank order, so a row's rank is its position + 1 whatever the sort.
-        positions = _sorted_positions(scored, sort)[offset : offset + limit]
-        rows = [
-            AtRiskRow(
-                rank=pos + 1,
-                customer_id=scored["customer_id"].iloc[pos],
-                risk_score=scored["risk_score"].iloc[pos],
-                predicted_class=(
-                    "at_risk"
-                    if scored["risk_score"].iloc[pos] >= bundle.threshold
-                    else "not_at_risk"
-                ),
+        positions = _sorted_positions(scored, sort, column)[offset : offset + limit]
+        for pos in positions:
+            value = float(scored[column].iloc[pos])
+            rows.append(
+                AtRiskRow(
+                    rank=pos + 1,
+                    customer_id=scored["customer_id"].iloc[pos],
+                    risk_score=value if column == "risk_score" else None,
+                    days_inactive=value if column == "days_inactive" else None,
+                    predicted_class="at_risk" if value >= threshold else "not_at_risk",
+                )
             )
-            for pos in positions
-        ]
 
+    demo = dataset.kind == "demo"
     return AtRiskOut(
-        model_version=bundle.version,
+        dataset_id=dataset.id,
+        method=method,
+        reason=None if demo else scoring.get("reason"),
+        model_version=bundle.version if demo else method,
         cutoff=cutoff,
         data_through=repositories.data_through(session, dataset.id),
         window_days=features.WINDOW_DAYS,
         horizon_days=features.HORIZON_DAYS,
-        decision_threshold=bundle.threshold,
-        eligible_customers=len(scores),
-        at_risk_count=sum(1 for s in scores if s >= bundle.threshold),
+        decision_threshold=threshold,
+        eligible_customers=len(values),
+        at_risk_count=sum(1 for v in values if v >= threshold),
         score_histogram=histogram,
+        histogram_unit=column,
         sort=sort,
         rows=rows,
-        evaluation=_evaluation(bundle),
-        caveat=CAVEAT,
+        evaluation=_evaluation(bundle) if demo else None,
+        backtest=None if demo else scoring.get("backtest"),
+        caveat=CAVEAT if demo else UPLOAD_CAVEAT,
     )

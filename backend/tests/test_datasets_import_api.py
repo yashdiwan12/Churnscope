@@ -97,7 +97,7 @@ def test_import_then_list_shows_demo_and_upload(session, users):
     assert (ds["customer_count"], ds["event_count"]) == (3, 9)
     assert ds["signup_rule"] == "event"
     assert ds["data_through"].startswith("2026-03-09")
-    assert ds["scoring_method"] is None
+    assert ds["scoring_method"] == "unavailable"  # 8 days of history: too short to score
     assert ds["capabilities"]["retention"] is True
     assert ds["capabilities"]["churn"] is False
     assert out["imported_events"] == 9

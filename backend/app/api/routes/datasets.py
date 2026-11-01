@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.authorization import current_profile
 from app.db import datasets as datasets_db
+from app.db import repositories
 from app.db.models import Dataset, UserProfile
 from app.db.session import get_session
 from app.schemas.datasets import (
@@ -20,7 +21,7 @@ from app.schemas.datasets import (
     ImportOut,
     SkipReason,
 )
-from app.services import prediction, uploads
+from app.services import prediction, upload_scoring, uploads
 from app.services.metrics import EVENT_NAMES, FUNNEL_STEPS, QUALIFYING_EVENTS
 
 logger = logging.getLogger("churnscope.datasets")
@@ -110,6 +111,34 @@ def _parse_and_prepare(form: uploads.UploadForm) -> uploads.Prepared:
     return uploads.prepare(parsed, mapping, derive, acknowledged)
 
 
+def run_scoring(session: Session, dataset: Dataset) -> None:
+    """Spec 5a for one upload, stored on its row in a transaction of its own.
+
+    A failure while fitting is stored as ``FAILED`` (the page then offers a Retry) and logged by
+    exception type only: the message or traceback could carry values from the file. Storing the
+    result can still raise a database error, which the caller handles.
+    """
+    try:
+        events = repositories.load_events(session, dataset.id)
+        scoring = upload_scoring.fit(events, pd.Timestamp.now(tz="UTC"))
+    except Exception as exc:  # noqa: BLE001 - any failure leaves the import intact
+        session.rollback()
+        logger.error("scoring failed: %s", type(exc).__name__)
+        scoring = dict(upload_scoring.FAILED)
+    datasets_db.set_scoring(session, dataset.id, scoring)
+    prediction.evict_dataset(dataset.id)
+    session.refresh(dataset)
+
+
+def _score_after_import(session: Session, dataset: Dataset) -> None:
+    """The import has committed, so its 201 stands whatever happens here."""
+    try:
+        run_scoring(session, dataset)
+    except SQLAlchemyError as exc:
+        session.rollback()
+        logger.error("storing scoring failed: %s", type(exc).__name__)
+
+
 @router.post("", response_model=ImportOut, status_code=201)
 async def import_upload(request: Request, profile: Profile, session: SessionDep) -> ImportOut:
     """Import a CSV as the caller's upload, replacing the previous one in one transaction.
@@ -142,6 +171,7 @@ async def import_upload(request: Request, profile: Profile, session: SessionDep)
         # type only and drop the chain so no traceback with them reaches the server log.
         logger.error("import failed: %s", type(exc).__name__)
         raise HTTPException(500, "Import failed") from None
+    await run_in_threadpool(_score_after_import, session, dataset)
     return ImportOut(
         dataset=dataset_out(dataset),
         imported_events=len(prepared.events),
@@ -151,6 +181,23 @@ async def import_upload(request: Request, profile: Profile, session: SessionDep)
         invalid_rows=prepared.invalid_rows,
         skipped=[SkipReason(row=r, code=c) for r, c in prepared.skipped[: uploads.MAX_REASONS]],
     )
+
+
+@router.post("/{dataset_id}/score", response_model=DatasetOut)
+def score_dataset(dataset_id: DatasetId, profile: Profile, session: SessionDep) -> DatasetOut:
+    """(Re)run churn scoring on the caller's upload. The demo, a missing id or someone else's
+    dataset is 404."""
+    dataset = datasets_db.own_upload(session, profile.id)
+    if dataset is None or dataset.id != dataset_id:
+        raise HTTPException(404, "Dataset not found")
+    try:
+        run_scoring(session, dataset)
+    except (OperationalError, InterfaceError):
+        raise  # the app's 503 handler, which logs only the exception type
+    except SQLAlchemyError as exc:
+        logger.error("storing scoring failed: %s", type(exc).__name__)
+        raise HTTPException(500, "Scoring failed") from None
+    return dataset_out(dataset)
 
 
 @router.delete("/{dataset_id}", status_code=204)

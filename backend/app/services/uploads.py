@@ -20,6 +20,7 @@ from starlette.formparsers import MultiPartException
 from app.db.models import Dataset
 from app.schemas.events import MAX_CLOCK_SKEW, MIN_EVENT_TIME
 from app.services.metrics import EVENT_NAMES, FUNNEL_STEPS, QUALIFYING_EVENTS
+from app.services.upload_scoring import SCOREABLE
 
 logger = logging.getLogger("churnscope.uploads")
 
@@ -344,7 +345,8 @@ def prepare(
 
 
 def capabilities(dataset: Dataset) -> dict:
-    """Which pages work for a dataset. The demo has everything; churn waits for Task 7."""
+    """Which pages work for a dataset. The demo has everything. An upload's churn needs a usable
+    scoring method (spec 5a) and a signup (mapped or derived)."""
     if dataset.kind == "demo":
         return {
             "overview": True,
@@ -360,12 +362,14 @@ def capabilities(dataset: Dataset) -> dict:
         return int(counts.get(name, 0)) > 0
 
     missing = [step for step in FUNNEL_STEPS if not has(step)]
+    signup = has("signup") or dataset.signup_rule == "derived_from_first_event"
+    method = (dataset.scoring or {}).get("method")
     return {
         "overview": True,
         "engagement": True,
-        "retention": has("signup") or dataset.signup_rule == "derived_from_first_event",
+        "retention": signup,
         "funnel": not missing,
-        "churn": False,
+        "churn": signup and method in SCOREABLE,
         "funnel_missing": missing,
     }
 

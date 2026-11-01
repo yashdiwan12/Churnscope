@@ -176,3 +176,17 @@ def test_retention_table_empty_matrix_has_the_columns():
     table = retention_table(retention_matrix([]))
     assert table.empty
     assert list(table.columns) == TABLE_COLUMNS
+
+
+def test_days_histogram_has_four_week_bins_and_says_days():
+    counts = [5, 3, 2, 1]
+    bins = [{"bin_start": i * 7, "bin_end": (i + 1) * 7, "count": c} for i, c in enumerate(counts)]
+    fig = risk_histogram(bins, 7.0, unit="days_inactive")
+    assert list(fig.data[0].y) == [5, 3, 2, 1]
+    assert list(fig.data[0].x) == [3.5, 10.5, 17.5, 24.5]
+    lines = [s for s in fig.layout.shapes if s.type == "line"]
+    assert lines[0].x0 == 7.0
+    assert fig.layout.xaxis.title.text == "days inactive"
+    assert list(fig.layout.xaxis.range) == [0, 28]
+    text = fig.to_json().lower()
+    assert "probability" not in text and "risk score" not in text

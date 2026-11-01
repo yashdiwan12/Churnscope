@@ -1,9 +1,21 @@
-"""Churn Risk: relative risk scores for current customers and how the model was evaluated."""
+"""Churn Risk: risk for current customers and how the method was evaluated.
+
+The demo uses the shipped model and shows its synthetic test metrics. An upload uses the method
+learned from its own file (a model or the days-inactive rule) and shows the backtest on that
+file's history; the synthetic metrics never appear for an upload.
+"""
 
 import streamlit as st
 
 import data
-from api_client import ApiClient, ApiError, NotAllowed, NotSignedIn, ServiceUnavailable
+from api_client import (
+    IMPORT_TIMEOUT,
+    ApiClient,
+    ApiError,
+    NotAllowed,
+    NotSignedIn,
+    ServiceUnavailable,
+)
 from charts import risk_histogram
 from dataset import Context
 from labels import cutoff_label, freshness_label, percent
@@ -15,6 +27,27 @@ DERIVED_NOTE = (
     "Account age is unreliable: signup dates are derived from each customer's "
     "first event in your file."
 )
+UPLOAD_CAVEAT = (
+    "Churn here means no activity for 14 days, not cancellation. Results are measured on your "
+    "file's own history, which shows the method worked recently, not that it will keep working."
+)
+SHORT_HISTORY = "Churn scoring needs at least 28 days of history in your file."
+SCORING_FAILED = "Churn scoring failed for your file."
+UNCHECKED = "Not checked on your data: too little history."
+# Fixed copy per reason code; an unknown code shows only the label above.
+_UNCHECKED_REASONS = {
+    "not_enough_history_for_test": "A check needs about 9 weeks of events.",
+    "too_few_test_rows": "The test weeks have fewer than 200 customer rows.",
+    "too_few_test_churners": "The test weeks have fewer than 20 customers who went quiet.",
+    "too_few_test_non_churners": "The test weeks have fewer than 20 customers who stayed active.",
+    "too_few_train_churners": "The training weeks have fewer than 20 customers who went quiet.",
+    "too_few_train_non_churners": "The training weeks have no customers who stayed active.",
+}
+_METHOD_LABELS = {
+    "logistic": "a model trained on your file",
+    "inactive_rule": "days since last activity (the rule)",
+    "rule_unchecked": "days since last activity (the rule)",
+}
 BASELINE_NOTE_FOR_VERSION = "churn-lr-e330fa34d3"  # the version docs/model_card.md was written for
 _BEATS_NOTE = (
     "On the test set this model does not clearly beat a one-line rule, customers "
@@ -45,9 +78,68 @@ def _evaluation(evaluation: dict) -> None:
     st.caption(f"Test data synthetic: {kind}")
 
 
+def _backtest(method: str, backtest: dict) -> None:
+    """The check on the upload's own later weeks: counts behind every number, model vs rule."""
+    model, rule = backtest["model"], backtest["rule"]
+    st.caption(f"Method used: {_METHOD_LABELS.get(method, _METHOD_LABELS['inactive_rule'])}")
+    st.caption(
+        f"Measured on your history: {backtest['test_rows']:,} test rows, "
+        f"{backtest['test_churners']:,} churners"
+    )
+    with st.expander("How this was checked"):
+        st.caption(
+            f"Training: {backtest['train_rows']:,} rows, {backtest['train_churners']:,} churners"
+        )
+        st.caption(f"PR-AUC: model {_score(model['pr_auc'])}, rule {_score(rule['pr_auc'])}")
+        st.caption(f"ROC-AUC: model {_score(model['roc_auc'])}, rule {_score(rule['roc_auc'])}")
+        st.caption(
+            "The model is trained on earlier weeks of your file and tested on the latest weeks. "
+            "It is used only when its PR-AUC beats the rule (customers inactive for 7 or more "
+            "days) by at least 0.02; otherwise the rule is used."
+        )
+
+
+def _upload_basis(result: dict) -> None:
+    method = result["method"]
+    if method == "rule_unchecked" or result.get("backtest") is None:
+        st.caption(f"Method used: {_METHOD_LABELS['rule_unchecked']}")
+        st.caption(UNCHECKED)
+        if reason := _UNCHECKED_REASONS.get(result.get("reason") or ""):
+            st.caption(reason)
+    else:
+        _backtest(method, result["backtest"])
+    st.caption(UPLOAD_CAVEAT)
+
+
+def _rescore(api: ApiClient, ctx: Context) -> None:
+    try:
+        api.post(f"/datasets/{ctx.dataset_id}/score", timeout=IMPORT_TIMEOUT)
+    except (ApiError, NotAllowed, NotSignedIn, ServiceUnavailable) as exc:
+        render_error(exc, retry_key="churn_rescore_retry")
+        return
+    st.cache_data.clear()
+    st.rerun()  # dataset.select re-reads the capabilities on the next run
+
+
+def _upload_unavailable(api: ApiClient, ctx: Context) -> None:
+    if ctx.scoring_method == "unavailable":
+        render_empty(SHORT_HISTORY)
+    elif ctx.scoring_method == "failed":
+        render_empty(SCORING_FAILED)
+        if st.button("Retry scoring", key="churn_rescore"):
+            _rescore(api, ctx)
+    else:
+        render_empty(NOT_AVAILABLE)
+
+
 _SORT_LABELS = {
     "risk_desc": "Highest risk first",
     "risk_asc": "Lowest risk first",
+    "customer_asc": "Customer ID (A-Z)",
+}
+_DAYS_SORT_LABELS = {
+    "risk_desc": "Most days inactive first",
+    "risk_asc": "Fewest days inactive first",
     "customer_asc": "Customer ID (A-Z)",
 }
 _CLASS_LABELS = {"at_risk": "At risk", "not_at_risk": "Not at risk"}
@@ -56,7 +148,10 @@ _CLASS_LABELS = {"at_risk": "At risk", "not_at_risk": "Not at risk"}
 def render(api: ApiClient, ctx: Context) -> None:
     st.header("Churn Risk")
     if not ctx.capabilities["churn"]:
-        render_empty(NOT_AVAILABLE)
+        if ctx.kind == "upload":
+            _upload_unavailable(api, ctx)
+        else:
+            render_empty(NOT_AVAILABLE)
         return
     if ctx.derived_signup:
         st.caption(DERIVED_NOTE)
@@ -86,47 +181,72 @@ def render(api: ApiClient, ctx: Context) -> None:
         render_empty("No customers to score yet")
         return
 
+    upload = ctx.kind == "upload"
+    days = result.get("histogram_unit") == "days_inactive"
     st.caption(cutoff_label(result["cutoff"], result["window_days"]))
     st.caption(freshness_label(result["data_through"]))
     eligible = result["eligible_customers"]
-    st.caption(
-        "Scores estimate which customers are likely to go quiet over the next "
-        f"{result['horizon_days']} days."
-    )
-    st.caption(f"Eligible customers scored: {eligible:,}")
-    st.caption(
-        f"At risk (score at or above the threshold): {result['at_risk_count']:,} (n={eligible:,})"
-    )
-    st.caption(
-        "Each customer has a risk score (relative): higher means more at risk, not a likelihood."
-    )
-    st.caption(result["caveat"])
-    with st.expander("About this model"):
-        st.caption(f"Model version: {result['model_version']}")
-        _evaluation(result["evaluation"])
-        st.caption(baseline_note(result["model_version"]))
+    if days:
+        st.caption(
+            "Customers are ranked by days since their last activity: the longer they have been "
+            f"quiet, the more likely they stay quiet over the next {result['horizon_days']} days."
+        )
+        st.caption(f"Eligible customers ranked: {eligible:,}")
+        st.caption(
+            f"At risk (inactive for {result['decision_threshold']:g} or more days): "
+            f"{result['at_risk_count']:,} (n={eligible:,})"
+        )
+    else:
+        st.caption(
+            "Scores estimate which customers are likely to go quiet over the next "
+            f"{result['horizon_days']} days."
+        )
+        st.caption(f"Eligible customers scored: {eligible:,}")
+        st.caption(
+            "At risk (score at or above the threshold): "
+            f"{result['at_risk_count']:,} (n={eligible:,})"
+        )
+        st.caption(
+            "Each customer has a risk score (relative): higher means more at risk, "
+            "not a likelihood."
+        )
+    if upload:
+        _upload_basis(result)
+    else:
+        st.caption(result["caveat"])
+        with st.expander("About this model"):
+            st.caption(f"Model version: {result['model_version']}")
+            _evaluation(result["evaluation"])
+            st.caption(baseline_note(result["model_version"]))
 
-    figure = risk_histogram(result["score_histogram"], result["decision_threshold"])
+    figure = risk_histogram(
+        result["score_histogram"],
+        result["decision_threshold"],
+        unit="days_inactive" if days else "risk_score",
+    )
     if figure is not None:
         st.plotly_chart(figure, width="stretch")
 
+    sort_labels = _DAYS_SORT_LABELS if days else _SORT_LABELS
     page_column, sort_column = st.columns(2)
     with page_column:
         st.number_input("Page", min_value=1, value=1, step=1, key="churn_page")
     with sort_column:
         st.selectbox(
             "Sort by",
-            list(_SORT_LABELS),
-            format_func=_SORT_LABELS.__getitem__,
+            list(sort_labels),
+            format_func=sort_labels.__getitem__,
             key="churn_sort",
         )
     rows = result["rows"]
     if rows:
+        value_column = "days inactive" if days else "risk score (relative)"
+        value_key = "days_inactive" if days else "risk_score"
         st.dataframe(
             {
                 "rank": [row["rank"] for row in rows],
                 "customer": [row["customer_id"] for row in rows],
-                "risk score (relative)": [float(row["risk_score"]) for row in rows],
+                value_column: [float(row[value_key]) for row in rows],
                 "predicted class": [
                     _CLASS_LABELS.get(row["predicted_class"], row["predicted_class"])
                     for row in rows
@@ -134,7 +254,7 @@ def render(api: ApiClient, ctx: Context) -> None:
             },
             column_config={
                 "rank": st.column_config.NumberColumn(format="%d"),
-                "risk score (relative)": st.column_config.NumberColumn(format="%.2f"),
+                value_column: st.column_config.NumberColumn(format="%.1f" if days else "%.2f"),
             },
             hide_index=True,
             width="stretch",

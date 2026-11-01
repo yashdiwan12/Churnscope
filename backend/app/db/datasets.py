@@ -6,7 +6,7 @@ else is "not visible": callers turn that into 404, never 403, so ids do not leak
 
 import uuid
 
-from sqlalchemy import delete, func, insert, or_, select, text
+from sqlalchemy import delete, func, insert, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from app.db.models import Customer, Dataset, Event
@@ -56,6 +56,23 @@ def delete_upload(session: Session, user_id: uuid.UUID, dataset_id: int) -> bool
     )
     session.commit()
     return result.rowcount > 0
+
+
+def set_scoring(session: Session, dataset_id: int, scoring: dict) -> None:
+    """Store an upload's scoring JSON (spec 5a) in its own transaction. Commits.
+
+    The caller evicts the dataset's churn-cache entries.
+    """
+    try:
+        session.execute(
+            update(Dataset)
+            .where(Dataset.id == dataset_id, Dataset.kind == "upload")
+            .values(scoring=scoring)
+        )
+        session.commit()
+    except BaseException:
+        session.rollback()
+        raise
 
 
 class StorageFull(Exception):
