@@ -5,6 +5,14 @@ from datetime import datetime, timedelta
 NO_DATA = "No data yet"
 
 
+_MARKDOWN_SPECIALS = frozenset("\\`*_[]()<>~$:!|&")
+
+
+def escape_markdown(text: str) -> str:
+    """Backslash-escape what Streamlit markdown would act on, so a user's text renders as typed."""
+    return "".join(f"\\{c}" if c in _MARKDOWN_SPECIALS else c for c in text)
+
+
 def percent(value: float | None) -> str:
     """A fraction as a percentage to one decimal (0.25 -> 25.0%); n/a when there is none."""
     return "n/a" if value is None else f"{value * 100:.1f}%"

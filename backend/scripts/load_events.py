@@ -1,7 +1,7 @@
 """Ingest a generated events.csv through the validated, idempotent ingestion service.
 
 Usage: PYTHONPATH=. uv run python scripts/load_events.py ../data/processed/events.csv
-Safe to re-run: duplicates are skipped by the database UNIQUE(event_id) constraint.
+Safe to re-run: duplicates are skipped by the database UNIQUE(dataset_id, event_id) constraint.
 """
 
 import json
@@ -11,6 +11,7 @@ from pathlib import Path
 import pandas as pd
 from sqlalchemy.orm import Session
 
+from app.db.datasets import DEMO_DATASET_ID
 from app.db.session import get_engine
 from app.services.ingestion import MAX_BATCH, ingest_events
 
@@ -22,7 +23,7 @@ def main(path: Path) -> None:
     totals = {"received": 0, "inserted": 0, "duplicates": 0, "conflicts": 0, "rejected": 0}
     with Session(get_engine()) as session:
         for i in range(0, len(records), MAX_BATCH):
-            r = ingest_events(session, records[i : i + MAX_BATCH])
+            r = ingest_events(session, records[i : i + MAX_BATCH], DEMO_DATASET_ID)
             totals["received"] += r.received
             totals["inserted"] += r.inserted
             totals["duplicates"] += r.duplicates

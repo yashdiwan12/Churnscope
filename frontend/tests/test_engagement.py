@@ -14,10 +14,11 @@ def engagement_script():
     import streamlit as st
 
     from api_client import ApiClient
+    from tests.fake_api import context_for
     from views import engagement
 
     st.info("Demo data: synthetic events from a seeded generator, not real customers.")
-    engagement.render(ApiClient("http://api.test", lambda: "AT"))
+    engagement.render(ApiClient("http://api.test", lambda: "AT"), context_for())
 
 
 def engagement_app(monkeypatch, status=200, body=ENGAGEMENT_OK):

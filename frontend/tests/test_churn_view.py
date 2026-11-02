@@ -16,10 +16,11 @@ def churn_script():
     import streamlit as st
 
     from api_client import ApiClient
+    from tests.fake_api import context_for
     from views import churn
 
     st.info("Demo data: synthetic events from a seeded generator, not real customers.")
-    churn.render(ApiClient("http://api.test", lambda: "AT"))
+    churn.render(ApiClient("http://api.test", lambda: "AT"), context_for())
 
 
 def churn_app(monkeypatch, status=200, body=AT_RISK_OK):
@@ -127,7 +128,12 @@ def test_churn_table_columns_and_rows(monkeypatch):
     assert frame["rank"].tolist() == [1, 2, 3]
     assert frame["predicted class"].tolist() == ["At risk", "At risk", "Not at risk"]
     assert frame["risk score (relative)"].tolist() == [0.93, 0.88, 0.41]
-    assert calls(requested)[-1] == {"limit": 50, "offset": 0, "sort": "risk_desc"}
+    assert calls(requested)[-1] == {
+        "dataset_id": 1,
+        "limit": 50,
+        "offset": 0,
+        "sort": "risk_desc",
+    }
 
 
 def test_churn_table_rank_is_integer_and_score_is_float(monkeypatch):
@@ -166,7 +172,12 @@ def test_churn_page_two_requests_offset_50(monkeypatch):
     run(at)
     at.number_input[0].set_value(2)
     run(at)
-    assert calls(requested)[-1] == {"limit": 50, "offset": 50, "sort": "risk_desc"}
+    assert calls(requested)[-1] == {
+        "dataset_id": 1,
+        "limit": 50,
+        "offset": 50,
+        "sort": "risk_desc",
+    }
 
 
 SORT_LABELS = ["Highest risk first", "Lowest risk first", "Customer ID (A-Z)"]
@@ -188,10 +199,15 @@ def test_churn_sort_choice_reaches_the_request(monkeypatch):
     run(at)
     at.selectbox[0].select("risk_asc")
     run(at)
-    assert calls(requested)[-1] == {"limit": 50, "offset": 0, "sort": "risk_asc"}
+    assert calls(requested)[-1] == {"dataset_id": 1, "limit": 50, "offset": 0, "sort": "risk_asc"}
     at.selectbox[0].select("customer_asc")
     run(at)
-    assert calls(requested)[-1] == {"limit": 50, "offset": 0, "sort": "customer_asc"}
+    assert calls(requested)[-1] == {
+        "dataset_id": 1,
+        "limit": 50,
+        "offset": 0,
+        "sort": "customer_asc",
+    }
 
 
 def test_churn_changing_sort_on_page_two_resets_to_page_one(monkeypatch):
@@ -199,10 +215,15 @@ def test_churn_changing_sort_on_page_two_resets_to_page_one(monkeypatch):
     run(at)
     at.number_input[0].set_value(2)
     run(at)
-    assert calls(requested)[-1] == {"limit": 50, "offset": 50, "sort": "risk_desc"}
+    assert calls(requested)[-1] == {
+        "dataset_id": 1,
+        "limit": 50,
+        "offset": 50,
+        "sort": "risk_desc",
+    }
     at.selectbox[0].select("risk_asc")
     run(at)
-    assert calls(requested)[-1] == {"limit": 50, "offset": 0, "sort": "risk_asc"}
+    assert calls(requested)[-1] == {"dataset_id": 1, "limit": 50, "offset": 0, "sort": "risk_asc"}
     assert at.number_input[0].value == 1
 
 
@@ -213,7 +234,12 @@ def test_churn_paging_keeps_the_chosen_sort(monkeypatch):
     run(at)
     at.number_input[0].set_value(2)
     run(at)
-    assert calls(requested)[-1] == {"limit": 50, "offset": 50, "sort": "customer_asc"}
+    assert calls(requested)[-1] == {
+        "dataset_id": 1,
+        "limit": 50,
+        "offset": 50,
+        "sort": "customer_asc",
+    }
 
 
 def test_churn_page_beyond_end_does_not_crash(monkeypatch):
@@ -254,3 +280,246 @@ def test_churn_503_shows_retry_without_server_text(monkeypatch):
     assert len(at.dataframe) == 0
     assert len(at.number_input) == 0
     assert len(at.selectbox) == 0
+
+
+# ----------------------------------------------------------------------------- uploads
+UPLOAD_CAVEAT = (
+    "Churn here means no activity for 14 days, not cancellation. Results are measured on your "
+    "file's own history, which shows the method worked recently, not that it will keep working."
+)
+DERIVED = (
+    "Account age is unreliable: signup dates are derived from each customer's "
+    "first event in your file."
+)
+BACKTEST = {
+    "train_rows": 1200,
+    "train_churners": 300,
+    "test_rows": 400,
+    "test_churners": 90,
+    "train_cutoffs": ["2026-08-01T00:00:00+00:00"],
+    "test_cutoffs": ["2026-09-01T00:00:00+00:00", "2026-09-08T00:00:00+00:00"],
+    "model": {"pr_auc": 0.71, "roc_auc": 0.83, "precision": 0.6, "recall": 0.7},
+    "rule": {"pr_auc": 0.55, "roc_auc": 0.7, "precision": 0.5, "recall": 0.9},
+}
+SYNTHETIC_TEXTS = (
+    "About this model",
+    "Model evaluation (test set)",
+    "Test data synthetic",
+    "Test churn rate",
+    "F1:",
+    "does not clearly beat",
+    "Compare with the naive baselines in the model card.",
+    "churn-lr-e330fa34d3",
+    "synthetic",
+)
+
+
+def _days_row(rank, customer_id, days, predicted_class):
+    return {
+        "rank": rank,
+        "customer_id": customer_id,
+        "risk_score": None,
+        "days_inactive": days,
+        "predicted_class": predicted_class,
+    }
+
+
+def upload_body(method="logistic", **changes):
+    body = copy.deepcopy(AT_RISK_OK)
+    body.update(
+        dataset_id=7,
+        method=method,
+        reason=None,
+        model_version=method,
+        backtest=copy.deepcopy(BACKTEST),
+        evaluation=None,
+        caveat="SERVER CAVEAT TEXT",
+        horizon_days=14,
+    )
+    if method != "logistic":
+        body.update(
+            histogram_unit="days_inactive",
+            decision_threshold=7.0,
+            score_histogram=[
+                {"bin_start": i * 7, "bin_end": (i + 1) * 7, "count": c}
+                for i, c in enumerate([60, 30, 20, 10])
+            ],
+            rows=[
+                _days_row(1, "cust-009", 25.5, "at_risk"),
+                _days_row(2, "cust-004", 8.25, "at_risk"),
+                _days_row(3, "cust-001", 0.5, "not_at_risk"),
+            ],
+        )
+    if method == "rule_unchecked":
+        body.update(backtest=None, reason="not_enough_history_for_test")
+    body.update(changes)
+    return body
+
+
+def upload_row(method="logistic", churn=True, signup_rule="event"):
+    from tests.fake_api import dataset_row
+
+    row = dataset_row(7, "upload", "events.csv", signup_rule=signup_rule, churn=churn)
+    row["scoring_method"] = method
+    return row
+
+
+def upload_script(row):
+    import streamlit as st
+
+    from api_client import ApiClient
+    from tests.fake_api import context_for
+    from views import churn
+
+    st.info("Your uploaded data: events.csv, private to you.")
+    churn.render(ApiClient("http://api.test", lambda: "AT"), context_for(row))
+
+
+def upload_app(monkeypatch, row, routes):
+    for key, value in CONFIGURED.items():
+        monkeypatch.setenv(key, value)
+    requested = install(monkeypatch, routes)
+    at = AppTest.from_function(upload_script, args=(row,), default_timeout=30)
+    at.session_state["tokens"] = Tokens("AT", "RT", time.time() + 3600)
+    return at, requested
+
+
+def all_text(at) -> str:
+    shown = texts(at)
+    frames = [str(list(df.value.columns)) for df in at.dataframe]
+    return "\n".join([shown, *frames, *[e.label for e in at.expander]])
+
+
+def test_upload_churn_shows_backtest_counts(monkeypatch):
+    row = upload_row("logistic", signup_rule="derived_from_first_event")
+    at, requested = upload_app(monkeypatch, row, {"/churn/at-risk": (200, upload_body())})
+    shown = texts(run(at))
+    assert calls(requested)[-1]["dataset_id"] == 7
+    assert "Method used: a model trained on your file" in shown
+    assert (
+        "Measured on your history: 400 test rows, 90 churners, PR-AUC model 0.710 vs rule 0.550"
+        in shown
+    )
+    assert "Training: 1,200 rows, 300 churners" in shown
+    assert "ROC-AUC: model 0.830, rule 0.700" in shown
+    assert UPLOAD_CAVEAT in shown
+    assert DERIVED in shown
+    assert list(at.dataframe[0].value.columns) == [
+        "rank",
+        "customer",
+        "risk score (relative)",
+        "predicted class",
+    ]
+
+
+def test_upload_churn_never_shows_synthetic_metrics(monkeypatch):
+    for method in ("logistic", "inactive_rule", "rule_unchecked"):
+        # Even a payload that wrongly carries the demo's evaluation block is not shown.
+        body = upload_body(method, evaluation=AT_RISK_OK["evaluation"])
+        at, _ = upload_app(monkeypatch, upload_row(method), {"/churn/at-risk": (200, body)})
+        shown = all_text(run(at))
+        for text in SYNTHETIC_TEXTS:
+            assert text not in shown, (method, text)
+        assert "SERVER CAVEAT TEXT" not in shown
+        assert AT_RISK_OK["caveat"] not in shown
+        assert UPLOAD_CAVEAT in shown
+
+
+def test_rule_view_shows_days_not_probability(monkeypatch):
+    body = upload_body("inactive_rule")
+    at, _ = upload_app(monkeypatch, upload_row("inactive_rule"), {"/churn/at-risk": (200, body)})
+    run(at)
+    shown = all_text(at)
+    frame = at.dataframe[0].value
+    assert list(frame.columns) == ["rank", "customer", "days inactive", "predicted class"]
+    assert frame["days inactive"].tolist() == [25.5, 8.25, 0.5]
+    assert frame["days inactive"].dtype.kind == "f"
+    assert "Method used: days since last activity (the rule)" in shown
+    assert "At risk (inactive for 7 or more days): 18 (n=120)" in shown
+    assert "the longer they have been quiet, the more likely they stay quiet" in shown
+    assert "probability" not in shown.lower()
+    assert "risk score" not in shown.lower()
+    assert list(at.selectbox[0].options) == [
+        "Most days inactive first",
+        "Fewest days inactive first",
+        "Customer ID (A-Z)",
+    ]
+    assert len(at.get("plotly_chart")) == 1
+
+
+def test_rule_unchecked_label(monkeypatch):
+    body = upload_body("rule_unchecked")
+    at, _ = upload_app(monkeypatch, upload_row("rule_unchecked"), {"/churn/at-risk": (200, body)})
+    shown = all_text(run(at))
+    assert "Not checked on your data: too little history." in shown
+    assert "A check needs about 9 weeks of events." in shown
+    assert "PR-AUC" not in shown and "Measured on your history" not in shown
+    assert "Customers are ranked by days since their last activity." in shown
+    assert "the more likely they stay quiet" not in shown
+    assert "days inactive" in shown
+    assert UPLOAD_CAVEAT in shown
+
+
+def test_rule_unchecked_unknown_reason_shows_only_the_label(monkeypatch):
+    body = upload_body("rule_unchecked", reason="server says <b>hi</b>")
+    at, _ = upload_app(monkeypatch, upload_row("rule_unchecked"), {"/churn/at-risk": (200, body)})
+    shown = all_text(run(at))
+    assert "Not checked on your data: too little history." in shown
+    assert "server says" not in shown
+
+
+def test_upload_with_short_history_names_the_missing_history(monkeypatch):
+    at, requested = upload_app(monkeypatch, upload_row("unavailable", churn=False), {})
+    shown = texts(run(at))
+    assert "Churn scoring needs at least 28 days of history in your file." in shown
+    assert calls(requested) == []
+
+
+def test_upload_scoring_failed_offers_retry(monkeypatch):
+    routes = {"POST /datasets/7/score": (200, upload_row("inactive_rule"))}
+    at, requested = upload_app(monkeypatch, upload_row("failed", churn=False), routes)
+    shown = texts(run(at))
+    assert "Churn scoring failed for your file." in shown
+    assert calls(requested) == []
+    retry = [b for b in at.get("button") if b.label == "Retry scoring"]
+    assert len(retry) == 1
+    retry[0].click()
+    run(at)
+    assert ("POST", "/datasets/7/score") in [(m, p) for m, p, _ in requested.calls]
+
+
+def test_upload_scoring_retry_failure_shows_fixed_copy(monkeypatch):
+    routes = {"POST /datasets/7/score": (503, {"detail": "boom from server"})}
+    at, _ = upload_app(monkeypatch, upload_row("failed", churn=False), routes)
+    run(at)
+    next(b for b in at.get("button") if b.label == "Retry scoring").click()
+    shown = texts(run(at))
+    assert "The service is unavailable. Please try again shortly." in shown
+    assert "boom from server" not in shown
+
+
+def test_upload_without_scoring_offers_retry(monkeypatch):
+    # The import committed but storing the score failed: scoring_method is None, signup exists.
+    routes = {"POST /datasets/7/score": (200, upload_row("inactive_rule"))}
+    at, requested = upload_app(monkeypatch, upload_row(None, churn=False), routes)
+    shown = texts(run(at))
+    assert "Churn scoring failed for your file." in shown
+    assert calls(requested) == []
+    retry = [b for b in at.get("button") if b.label == "Retry scoring"]
+    assert len(retry) == 1
+    retry[0].click()
+    run(at)
+    assert ("POST", "/datasets/7/score") in [(m, p) for m, p, _ in requested.calls]
+
+
+def test_upload_without_signup_names_the_missing_signup(monkeypatch):
+    row = upload_row(None, churn=False)
+    row["capabilities"] = row["capabilities"] | {"retention": False}
+    at, requested = upload_app(monkeypatch, row, {})
+    shown = texts(run(at))
+    assert (
+        "Churn Risk needs a signup event. Map one of your events to signup, or re-upload with "
+        '"first event counts as signup".'
+    ) in shown
+    assert "Retry scoring" not in [b.label for b in at.get("button")]
+    assert calls(requested) == []

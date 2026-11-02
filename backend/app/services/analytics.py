@@ -31,10 +31,10 @@ def _none(x: float) -> float | None:
 
 
 def resolve_window(
-    session: Session, start: pd.Timestamp | None, end: pd.Timestamp | None
+    session: Session, dataset_id: int, start: pd.Timestamp | None, end: pd.Timestamp | None
 ) -> tuple[Window, pd.Timestamp | None]:
     """Validate/default the [start, end) window. Defaults to the last 30 days of data."""
-    through = repositories.data_through(session)
+    through = repositories.data_through(session, dataset_id)
     if end is None:
         latest = through if through is not None else pd.Timestamp.now("UTC")
         end = latest.floor("D") + timedelta(days=1)
@@ -47,10 +47,12 @@ def resolve_window(
     return Window(start=start, end=end, data_through=through), through
 
 
-def overview(session: Session, start: pd.Timestamp | None, end: pd.Timestamp | None) -> OverviewOut:
-    window, _ = resolve_window(session, start, end)
+def overview(
+    session: Session, dataset_id: int, start: pd.Timestamp | None, end: pd.Timestamp | None
+) -> OverviewOut:
+    window, _ = resolve_window(session, dataset_id, start, end)
     s, e = pd.Timestamp(window.start), pd.Timestamp(window.end)
-    ev = repositories.load_events(session, until=e, since=s)
+    ev = repositories.load_events(session, dataset_id, until=e, since=s)
     active = metrics.active_users(ev, s, e)
     returning = metrics.returning_users(ev, s, e)
     in_window = ev[
@@ -72,10 +74,14 @@ def overview(session: Session, start: pd.Timestamp | None, end: pd.Timestamp | N
 
 
 def funnel_report(
-    session: Session, start: pd.Timestamp | None, end: pd.Timestamp | None, window_days: int
+    session: Session,
+    dataset_id: int,
+    start: pd.Timestamp | None,
+    end: pd.Timestamp | None,
+    window_days: int,
 ) -> FunnelOut:
     """Funnel for customers who signed up in [start, end), censored at the data's latest event."""
-    window, through = resolve_window(session, start, end)
+    window, through = resolve_window(session, dataset_id, start, end)
     s, e = pd.Timestamp(window.start), pd.Timestamp(window.end)
     note = (
         f"Customers who signed up in the window; each step must happen within {window_days} days "
@@ -93,7 +99,7 @@ def funnel_report(
             window=window, window_days=window_days, eligible_users=0, steps=steps, note=note
         )
 
-    ev = repositories.load_events(session)
+    ev = repositories.load_events(session, dataset_id)
     # Scope by each customer's *first* signup, the same anchor the funnel uses.
     first_signup = ev[ev["event_name"] == "signup"].groupby("customer_id")["event_timestamp"].min()
     in_range = first_signup[(first_signup >= s) & (first_signup < e)]
@@ -117,11 +123,11 @@ def funnel_report(
     )
 
 
-def retention_report(session: Session, periods: int) -> RetentionOut:
-    through = repositories.data_through(session)
+def retention_report(session: Session, dataset_id: int, periods: int) -> RetentionOut:
+    through = repositories.data_through(session, dataset_id)
     if through is None:
         return RetentionOut(as_of=None, period_days=metrics.PERIOD_DAYS, periods=periods, cells=[])
-    ev = repositories.load_events(session)
+    ev = repositories.load_events(session, dataset_id)
     r = metrics.cohort_retention(ev, as_of=through, periods=periods)
     cells = [
         RetentionCell(
@@ -141,9 +147,9 @@ def retention_report(session: Session, periods: int) -> RetentionOut:
 
 
 def engagement_report(
-    session: Session, start: pd.Timestamp | None, end: pd.Timestamp | None
+    session: Session, dataset_id: int, start: pd.Timestamp | None, end: pd.Timestamp | None
 ) -> EngagementOut:
-    window, _ = resolve_window(session, start, end)
+    window, _ = resolve_window(session, dataset_id, start, end)
     s, e = pd.Timestamp(window.start), pd.Timestamp(window.end)
-    ev = repositories.load_events(session, until=e, since=s)
+    ev = repositories.load_events(session, dataset_id, until=e, since=s)
     return EngagementOut(window=window, **metrics.engagement(ev, s, e))

@@ -77,5 +77,5 @@ def test_sidebar_start_after_end_shows_message_and_makes_no_overview_call(monkey
     shown = texts(run(at))
     assert "The start date must be on or before the end date." in shown
     assert "/analytics/overview" not in requested
-    assert requested == ["/me"]
+    assert requested == ["/me", "/datasets"]
     assert "Active users" not in shown

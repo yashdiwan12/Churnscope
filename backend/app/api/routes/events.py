@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.authorization import ingest_key
+from app.db.datasets import DEMO_DATASET_ID
 from app.db.session import get_session
 from app.schemas.events import IngestResult
 from app.services.ingestion import MAX_BATCH, ingest_events
@@ -44,4 +45,4 @@ async def post_events(
         raise HTTPException(422, detail) from None
     if len(batch.events) > MAX_BATCH:
         raise HTTPException(422, f"batch exceeds {MAX_BATCH} events")
-    return await run_in_threadpool(ingest_events, session, batch.events)
+    return await run_in_threadpool(ingest_events, session, batch.events, DEMO_DATASET_ID)

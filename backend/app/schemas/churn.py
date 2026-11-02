@@ -4,6 +4,10 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 MAX_CUSTOMERS_PER_REQUEST = 100
+UPLOAD_CAVEAT = (
+    "Churn here means no activity for 14 days, not cancellation. Results are measured on your "
+    "file's own history, which shows the method worked recently, not that it will keep working."
+)
 CustomerId = Annotated[str, Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")]
 
 
@@ -44,10 +48,15 @@ class HistogramBin(BaseModel):
 AtRiskSort = Literal["risk_desc", "risk_asc", "customer_asc"]
 
 
+AtRiskMethod = Literal["shipped_model", "logistic", "inactive_rule", "rule_unchecked"]
+HistogramUnit = Literal["risk_score", "days_inactive"]
+
+
 class AtRiskRow(BaseModel):
     rank: int  # 1-based, distinct even for tied scores
     customer_id: str
-    risk_score: float
+    risk_score: float | None  # model methods only; None when ranked by the rule
+    days_inactive: float | None = None  # rule methods only: days since last activity
     predicted_class: Literal["at_risk", "not_at_risk"]
 
 
@@ -65,16 +74,23 @@ class Evaluation(BaseModel):
 
 
 class AtRiskOut(BaseModel):
+    dataset_id: int
+    method: AtRiskMethod  # shipped_model for the demo; an upload's scoring method otherwise
+    reason: str | None = None  # an upload's scoring reason code (why it is unchecked), if any
     model_version: str
     cutoff: datetime | None  # None if no events exist
     data_through: datetime | None  # latest event timestamp (freshness label)
     window_days: int
     horizon_days: int
-    decision_threshold: float
+    decision_threshold: float  # a score for model methods; days inactive for rule methods
     eligible_customers: int
     at_risk_count: int
-    score_histogram: list[HistogramBin]  # 10 equal bins over [0, 1], the last one inclusive
+    # risk_score: 10 equal bins over [0, 1], the last one inclusive.
+    # days_inactive: 4 bins of 7 days over [0, 28).
+    score_histogram: list[HistogramBin]
+    histogram_unit: HistogramUnit
     sort: AtRiskSort  # the applied row order; rank is always the global rank by risk
     rows: list[AtRiskRow]
-    evaluation: Evaluation
+    evaluation: Evaluation | None  # the shipped model's synthetic test metrics; None for uploads
+    backtest: dict | None  # an upload's backtest on its own history; None for the demo
     caveat: str

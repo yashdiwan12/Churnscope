@@ -42,3 +42,13 @@ def test_percent_one_decimal_and_na_for_none():
     assert percent(0.25) == "25.0%"
     assert percent(1.0) == "100.0%"
     assert percent(0.12345) == "12.3%"
+
+
+def test_escape_markdown_makes_a_filename_literal():
+    from labels import escape_markdown
+
+    escaped = escape_markdown("my_*_[x](http://e.com)_:red[y].csv")
+    for i, c in enumerate(escaped):
+        if c in "_*[]():":
+            assert escaped[i - 1] == "\\", (c, escaped)
+    assert escape_markdown("events.csv") == "events.csv"

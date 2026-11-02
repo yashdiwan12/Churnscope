@@ -1,6 +1,6 @@
 """Validated, idempotent event ingestion.
 
-Pipeline: validate each row -> resolve customers -> INSERT ... ON CONFLICT (event_id) DO NOTHING
+Pipeline: validate each row -> resolve customers -> INSERT ... ON CONFLICT (dataset_id, event_id) DO NOTHING
 in one transaction. Duplicates are detected by the database UNIQUE constraint, so concurrent
 retries cannot race.
 """
@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from app.db.datasets import DEMO_DATASET_ID
 from app.db.models import Customer, Event
 from app.schemas.events import EventIn, IngestResult, Rejection
 
@@ -26,7 +27,9 @@ def _reason(err: ValidationError) -> str:
     )
 
 
-def ingest_events(session: Session, raw_events: Sequence[dict[str, Any]]) -> IngestResult:
+def ingest_events(
+    session: Session, raw_events: Sequence[dict[str, Any]], dataset_id: int = DEMO_DATASET_ID
+) -> IngestResult:
     if len(raw_events) > MAX_BATCH:
         raise ValueError(f"batch exceeds {MAX_BATCH} events")
 
@@ -41,9 +44,10 @@ def ingest_events(session: Session, raw_events: Sequence[dict[str, Any]]) -> Ing
     inserted = conflicts = 0
     if valid:
         try:
-            ids = _resolve_customers(session, valid)
+            ids = _resolve_customers(session, dataset_id, valid)
             rows = [
                 {
+                    "dataset_id": dataset_id,
                     "event_id": e.event_id,
                     "customer_id": ids[e.customer_id],
                     "event_name": e.event_name,
@@ -52,10 +56,14 @@ def ingest_events(session: Session, raw_events: Sequence[dict[str, Any]]) -> Ing
                 }
                 for e in valid
             ]
-            stmt = insert(Event).values(rows).on_conflict_do_nothing(index_elements=["event_id"])
+            stmt = (
+                insert(Event)
+                .values(rows)
+                .on_conflict_do_nothing(index_elements=["dataset_id", "event_id"])
+            )
             new_ids = {r[0] for r in session.execute(stmt.returning(Event.event_id))}
             inserted = len(new_ids)
-            conflicts = _count_conflicts(session, rows, new_ids)
+            conflicts = _count_conflicts(session, dataset_id, rows, new_ids)
             session.commit()  # customers + events land together or not at all
         except Exception:
             session.rollback()
@@ -70,7 +78,7 @@ def ingest_events(session: Session, raw_events: Sequence[dict[str, Any]]) -> Ing
     )
 
 
-def _count_conflicts(session: Session, rows: list[dict], new_ids: set[str]) -> int:
+def _count_conflicts(session: Session, dataset_id: int, rows: list[dict], new_ids: set[str]) -> int:
     """How many non-inserted rows differ from what is stored under their event_id.
 
     A retry of the same event is a harmless duplicate; the same event_id with different content
@@ -94,7 +102,10 @@ def _count_conflicts(session: Session, rows: list[dict], new_ids: set[str]) -> i
                 Event.event_name,
                 Event.event_timestamp,
                 Event.properties,
-            ).where(Event.event_id.in_({r["event_id"] for r in pending}))
+            ).where(
+                Event.dataset_id == dataset_id,
+                Event.event_id.in_({r["event_id"] for r in pending}),
+            )
         )
     }
     return sum(
@@ -105,7 +116,9 @@ def _count_conflicts(session: Session, rows: list[dict], new_ids: set[str]) -> i
     )
 
 
-def _resolve_customers(session: Session, events: Sequence[EventIn]) -> dict[str, int]:
+def _resolve_customers(
+    session: Session, dataset_id: int, events: Sequence[EventIn]
+) -> dict[str, int]:
     """Map external ids to internal ids, creating unknown customers.
 
     created_at is a placeholder until the customer table is loaded from the source of truth: the
@@ -117,17 +130,20 @@ def _resolve_customers(session: Session, events: Sequence[EventIn]) -> dict[str,
             earliest[e.customer_id] = e.event_timestamp
 
     stmt = insert(Customer).values(
-        [{"external_customer_id": c, "created_at": ts} for c, ts in earliest.items()]
+        [
+            {"dataset_id": dataset_id, "external_customer_id": c, "created_at": ts}
+            for c, ts in earliest.items()
+        ]
     )
     session.execute(
         stmt.on_conflict_do_update(
-            index_elements=["external_customer_id"],
+            index_elements=["dataset_id", "external_customer_id"],
             set_={"created_at": func.least(Customer.created_at, stmt.excluded.created_at)},
         )
     )
     rows = session.execute(
         select(Customer.external_customer_id, Customer.id).where(
-            Customer.external_customer_id.in_(earliest)
+            Customer.dataset_id == dataset_id, Customer.external_customer_id.in_(earliest)
         )
     )
     return {ext: pk for ext, pk in rows}

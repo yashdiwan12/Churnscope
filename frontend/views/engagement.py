@@ -5,6 +5,7 @@ import streamlit as st
 import data
 from api_client import ApiClient, ApiError, NotAllowed, NotSignedIn, ServiceUnavailable
 from charts import adoption_bars
+from dataset import Context
 from filters import date_range_sidebar
 from labels import freshness_label, window_label
 from states import render_empty, render_error
@@ -14,7 +15,7 @@ def _number(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.1f}"
 
 
-def render(api: ApiClient) -> None:
+def render(api: ApiClient, ctx: Context) -> None:
     st.header("Engagement")
     selection = date_range_sidebar()
     if selection.error is not None:
@@ -22,7 +23,9 @@ def render(api: ApiClient) -> None:
         return
     try:
         with st.spinner("Loading engagement..."):
-            result = data.engagement(api, selection.start, selection.end)
+            result = data.engagement(
+                api, ctx.dataset_id, ctx.user_id, selection.start, selection.end
+            )
     except (ApiError, NotAllowed, NotSignedIn, ServiceUnavailable) as exc:
         render_error(exc, retry_key="engagement_retry")
         return

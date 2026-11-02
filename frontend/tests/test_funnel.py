@@ -14,10 +14,11 @@ def funnel_script():
     import streamlit as st
 
     from api_client import ApiClient
+    from tests.fake_api import context_for
     from views import funnel
 
     st.info("Demo data: synthetic events from a seeded generator, not real customers.")
-    funnel.render(ApiClient("http://api.test", lambda: "AT"))
+    funnel.render(ApiClient("http://api.test", lambda: "AT"), context_for())
 
 
 def funnel_app(monkeypatch, status=200, body=FUNNEL_OK):

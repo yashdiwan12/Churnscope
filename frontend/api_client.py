@@ -7,6 +7,7 @@ import httpx
 
 TIMEOUT = 10
 ANALYTICS_TIMEOUT = 30
+IMPORT_TIMEOUT = 60
 
 
 class NotSignedIn(Exception):
@@ -22,9 +23,10 @@ class ServiceUnavailable(Exception):
 
 
 class ApiError(Exception):
-    def __init__(self, status_code: int):
+    def __init__(self, status_code: int, code: str | None = None):
         super().__init__(f"API returned {status_code}")
         self.status_code = status_code
+        self.code = code  # the error's machine code only, never the server's message text
 
 
 class ApiClient:
@@ -40,6 +42,17 @@ class ApiClient:
 
     def post(self, path: str, json: Any = None, *, timeout: float | None = None) -> Any:
         return self._request("POST", path, timeout=timeout, json=json)
+
+    def post_file(
+        self,
+        path: str,
+        *,
+        file: tuple[str, bytes, str],
+        data: dict[str, str],
+        timeout: float | None = None,
+    ) -> Any:
+        """A multipart POST: `file` is (filename, content, content type), sent as field `file`."""
+        return self._request("POST", path, timeout=timeout, files={"file": file}, data=data)
 
     def delete(self, path: str, *, timeout: float | None = None) -> Any:
         return self._request("DELETE", path, timeout=timeout)
@@ -66,5 +79,13 @@ class ApiClient:
         if status >= 500:
             raise ServiceUnavailable("The service is unavailable")
         if status >= 400:
-            raise ApiError(status)
+            raise ApiError(status, _error_code(response))
         return None if status == 204 else response.json()
+
+
+def _error_code(response: httpx.Response) -> str | None:
+    try:
+        code = response.json()["detail"]["code"]
+    except (ValueError, KeyError, TypeError):
+        return None
+    return code if isinstance(code, str) else None

@@ -13,10 +13,11 @@ def retention_script():
     import streamlit as st
 
     from api_client import ApiClient
+    from tests.fake_api import context_for
     from views import retention
 
     st.info("Demo data: synthetic events from a seeded generator, not real customers.")
-    retention.render(ApiClient("http://api.test", lambda: "AT"))
+    retention.render(ApiClient("http://api.test", lambda: "AT"), context_for())
 
 
 def retention_app(monkeypatch, status=200, body=RETENTION_OK):

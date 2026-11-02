@@ -7,32 +7,36 @@ from sqlalchemy.orm import Session
 from app.db.models import Customer, Event
 
 
-def data_through(session: Session) -> pd.Timestamp | None:
-    """Timestamp of the latest event, i.e. how fresh the data is. None if there are no events."""
-    ts = session.scalar(select(func.max(Event.event_timestamp)))
+def data_through(session: Session, dataset_id: int) -> pd.Timestamp | None:
+    """Timestamp of the dataset's latest event, i.e. how fresh the data is. None if no events."""
+    ts = session.scalar(
+        select(func.max(Event.event_timestamp)).where(Event.dataset_id == dataset_id)
+    )
     return None if ts is None else pd.Timestamp(ts).tz_convert("UTC")
 
 
-def latest_event_id(session: Session) -> int | None:
+def latest_event_id(session: Session, dataset_id: int) -> int | None:
     """Highest event id, which grows with every insert whatever the event's own timestamp is."""
-    return session.scalar(select(func.max(Event.id)))
+    return session.scalar(select(func.max(Event.id)).where(Event.dataset_id == dataset_id))
 
 
-def customer_external_ids(session: Session, pks: list[int]) -> dict[int, str]:
+def customer_external_ids(session: Session, dataset_id: int, pks: list[int]) -> dict[int, str]:
     """Map internal customer ids to external ids; unknown ids are absent from the result."""
     if not pks:
         return {}
     rows = session.execute(
-        select(Customer.id, Customer.external_customer_id).where(Customer.id.in_(pks))
+        select(Customer.id, Customer.external_customer_id).where(
+            Customer.dataset_id == dataset_id, Customer.id.in_(pks)
+        )
     )
     return {pk: ext for pk, ext in rows}
 
 
-def resolve_customers(session: Session, external_ids: list[str]) -> dict[str, int]:
+def resolve_customers(session: Session, dataset_id: int, external_ids: list[str]) -> dict[str, int]:
     """Map external customer ids to internal ids; unknown ids are absent from the result."""
     rows = session.execute(
         select(Customer.external_customer_id, Customer.id).where(
-            Customer.external_customer_id.in_(external_ids)
+            Customer.dataset_id == dataset_id, Customer.external_customer_id.in_(external_ids)
         )
     )
     return {ext: pk for ext, pk in rows}
@@ -40,11 +44,12 @@ def resolve_customers(session: Session, external_ids: list[str]) -> dict[str, in
 
 def load_events(
     session: Session,
+    dataset_id: int,
     until: pd.Timestamp | None = None,
     since: pd.Timestamp | None = None,
     customer_ids: list[int] | None = None,
 ) -> pd.DataFrame:
-    """Events before ``until`` (all if None), loaded in memory.
+    """The dataset's events before ``until`` (all if None), loaded in memory.
 
     With ``customer_ids``, only those customers' events are fetched. With ``since``, only events
     at or after it are fetched, plus every ``signup`` event (needed to tell new from returning
@@ -58,7 +63,7 @@ def load_events(
         Event.event_name,
         Event.event_timestamp,
         Event.properties,
-    )
+    ).where(Event.dataset_id == dataset_id)
     if until is not None:
         stmt = stmt.where(Event.event_timestamp < until.to_pydatetime())
     if customer_ids is not None:

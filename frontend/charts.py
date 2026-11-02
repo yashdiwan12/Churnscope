@@ -189,30 +189,43 @@ def retention_heatmap(matrix: pd.DataFrame) -> go.Figure | None:
     return fig
 
 
-def risk_histogram(bins: list[dict], threshold: float) -> go.Figure | None:
-    """Customers per risk-score bin with a vertical line at the decision threshold."""
+def risk_histogram(
+    bins: list[dict], threshold: float, unit: str = "risk_score"
+) -> go.Figure | None:
+    """Customers per bin with a vertical line at the at-risk threshold.
+
+    ``unit`` is the API's ``histogram_unit``: ``risk_score`` (10 bins over [0, 1]) or
+    ``days_inactive`` (the rule: 4 bins of 7 days over [0, 28), never called a score).
+    """
     if not bins or all(row["count"] == 0 for row in bins):
         return None
+    days = unit == "days_inactive"
+    label = "days inactive" if days else "risk score (relative)"
+    edge = "{:.0f}" if days else "{:.1f}"
     fig = go.Figure(
         go.Bar(
             x=[(row["bin_start"] + row["bin_end"]) / 2 for row in bins],
             y=[row["count"] for row in bins],
             width=[row["bin_end"] - row["bin_start"] for row in bins],
-            customdata=[f"{row['bin_start']:.1f} to {row['bin_end']:.1f}" for row in bins],
-            hovertemplate="risk score (relative) %{customdata}<br>%{y} customers<extra></extra>",
+            customdata=[
+                f"{edge.format(row['bin_start'])} to {edge.format(row['bin_end'])}" for row in bins
+            ],
+            hovertemplate=f"{label} %{{customdata}}<br>%{{y}} customers<extra></extra>",
             name="Customers",
         )
     )
     fig.add_vline(
         x=threshold,
         line_dash="dash",
-        annotation_text=f"decision threshold {threshold:.2f}",
+        annotation_text=(
+            f"at risk from {threshold:g} days" if days else f"decision threshold {threshold:.2f}"
+        ),
     )
     fig.update_layout(
-        title="Customers by risk score (relative)",
-        xaxis_title="risk score (relative)",
+        title=f"Customers by {label}",
+        xaxis_title=label,
         yaxis_title="customers",
-        xaxis={"range": [0, 1]},
+        xaxis={"range": [0, bins[-1]["bin_end"]] if days else [0, 1]},
         margin={"t": 40, "b": 40},
     )
     return fig
