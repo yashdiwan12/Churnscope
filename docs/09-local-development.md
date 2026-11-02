@@ -1,6 +1,6 @@
 # 9. Local development
 
-> Everything through Phase 6b is real: backend, data, model, Google sign-in and authorization, and the Streamlit dashboard. Uploads (6b) are built on branch `phase-6b-uploads` (merge pending); deployment (7) is still to come. Tag changes in [history](10-project-history.md).
+> Everything through Phase 6b is real: backend, data, model, Google sign-in and authorization, and the Streamlit dashboard. Uploads (6b) are built and merged (run `alembic upgrade head` to get migration `0003`); deployment (7) is still to come. Tag changes in [history](10-project-history.md).
 
 ## 9.1 Prerequisites
 

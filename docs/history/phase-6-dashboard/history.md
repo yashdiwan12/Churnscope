@@ -26,7 +26,7 @@
 
 ## Phase 6b — Bring your own data (uploads)
 
-**Status:** built on branch `phase-6b-uploads`, merge pending · **Date:** 2026-11-01 · spec: [2026-11-01-phase6b-uploads-design.md](../../superpowers/specs/2026-11-01-phase6b-uploads-design.md) · plan: [2026-11-01-phase6b-uploads.md](../../superpowers/plans/2026-11-01-phase6b-uploads.md) · executed subagent-driven, every task independently reviewed.
+**Status:** done, merged into `main` 2026-11-02 · **Date:** 2026-11-01 · spec: [2026-11-01-phase6b-uploads-design.md](../../superpowers/specs/2026-11-01-phase6b-uploads-design.md) · plan: [2026-11-01-phase6b-uploads.md](../../superpowers/plans/2026-11-01-phase6b-uploads.md) · executed subagent-driven, every task independently reviewed.
 
 ### Done
 - Task 1: migration `0003_datasets` (datasets table, demo = id 1, `dataset_id` on customers and events, per-dataset uniques, composite FK, new indexes, RLS), `db/datasets.py` ownership rules, ingestion conflict targets per dataset, `POST /events` pinned to dataset 1.

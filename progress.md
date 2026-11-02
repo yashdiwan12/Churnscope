@@ -2,7 +2,7 @@
 
 Live tracker of implementation progress per phase. Detailed notes, decisions, and evidence live in each phase's `docs/history/<phase>/history.md`; the phase summary table is in [docs/10-project-history.md](docs/10-project-history.md).
 
-**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-11-01 · Phase 6b built on branch `phase-6b-uploads` (merge pending): backend 392 (2 opt-in timing tests skipped) and frontend 192 tests pass locally at the last full run
+**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-11-02 · Phase 6b merged into `main`: backend 398 (2 opt-in timing tests skipped) and frontend 200 tests pass locally at the last full run
 
 ## Summary
 
@@ -15,7 +15,7 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 | 4 | Churn model | ✅ Done | 8 / 8 |
 | 5 | Authentication & authorization | ✅ Done | 8 / 8 |
 | 6 | Dashboard | ✅ Done (merged) | 7 / 7 |
-| 6b | Bring your own data (uploads) | ✅ Done (merge pending) | 8 / 8 |
+| 6b | Bring your own data (uploads) | ✅ Done (merged) | 8 / 8 |
 | 7 | Quality & documentation | ⬜ Not started | 0 / 10 |
 
 ## Phase 0 — Setup ✅  ([history](docs/history/phase-0-setup/history.md))
@@ -93,7 +93,7 @@ Spec: [docs/superpowers/specs/2026-10-30-phase6-dashboard-design.md](docs/superp
 - Saved views (optional, P1): **deferred**, not counted. `/me/reports` already exists; the UI can follow later.
 
 ## Phase 6b — Bring your own data (uploads) ✅  ([history](docs/history/phase-6-dashboard/history.md#phase-6b--bring-your-own-data-uploads))
-Spec: [docs/superpowers/specs/2026-11-01-phase6b-uploads-design.md](docs/superpowers/specs/2026-11-01-phase6b-uploads-design.md) · plan: [docs/superpowers/plans/2026-11-01-phase6b-uploads.md](docs/superpowers/plans/2026-11-01-phase6b-uploads.md) · executed subagent-driven on branch `phase-6b-uploads`; every task independently reviewed. Built, not yet merged.
+Spec: [docs/superpowers/specs/2026-11-01-phase6b-uploads-design.md](docs/superpowers/specs/2026-11-01-phase6b-uploads-design.md) · plan: [docs/superpowers/plans/2026-11-01-phase6b-uploads.md](docs/superpowers/plans/2026-11-01-phase6b-uploads.md) · executed subagent-driven on branch `phase-6b-uploads`; every task independently reviewed. Merged into `main` on 2026-11-02.
 - [x] Datasets table and migration `0003`, dataset-scoped queries, ownership rules (404 for others' ids)
 - [x] `?dataset_id=` on analytics and churn routes; dataset-keyed churn cache
 - [x] CSV parsing and `POST /datasets/check` (limits, scoped 422, approximate-signup warning)
@@ -102,7 +102,7 @@ Spec: [docs/superpowers/specs/2026-11-01-phase6b-uploads-design.md](docs/superpo
 - [x] Upload data page
 - [x] Churn on uploads trained and backtested on the file's own history (JSON model, floors, Retry)
 - [x] Purge script (`scripts/purge_uploads.py`), docs, progress
-- Not counted, still open: whole-branch review, real run-through with the user on three files, push and merge (the user is asked first). Import timing on the real Supabase project was measured 2026-11-01 (50,000 events plus 10,000 customers in 6.7 s; limits stand).
+- Not counted: whole-branch review done (ready with fixes; fix round and re-review done, plus a guard for files with no usable rows); test files for the run-through prepared in `data/processed/trial/`; merged with the user's approval on 2026-11-02. Import timing on the real Supabase project was measured 2026-11-01 (50,000 events plus 10,000 customers in 6.7 s; limits stand).
 
 ## Phase 7 — Quality & documentation ⬜  ([history](docs/history/phase-7-quality-and-docs/history.md))
 Nothing in Phase 7 is ticked: its items are a consolidated final pass. Much of the underlying coverage already exists from earlier phases (ingestion, analytics known-example, model/artifact, auth/ownership and RLS tests) and CI runs on GitHub, so the pass is mostly audit, gaps and documentation, not new test suites. Inherited items are listed after the checklist.
@@ -116,7 +116,7 @@ Nothing in Phase 7 is ticked: its items are a consolidated final pass. Much of t
 - [ ] Screenshots and setup instructions
 - [ ] Secrets/logging/data-exposure review
 - [ ] Deploy after local workflow is reliable
-- Inherited from earlier phases (not counted): add the deployed app URL to Supabase's redirect list and the Google client origins; publish the Google consent screen (needs a domain, privacy page, home page) or stay in Testing with named test users; optional open-access setting (`ALLOW_ANY_GOOGLE_USER`) and GitHub sign-in; move `ALLOWED_EMAILS` and keys into the host's secret store; triage the deferred minors from the Phase 5 and Phase 6 logs; verify the `app.py` page registration on the real app (AppTest cannot navigate callable pages).
+- Inherited from earlier phases (not counted): add the deployed app URL to Supabase's redirect list and the Google client origins; publish the Google consent screen (needs a domain, privacy page, home page) or stay in Testing with named test users; optional open-access setting (`ALLOW_ANY_GOOGLE_USER`) and GitHub sign-in; move `ALLOWED_EMAILS` and keys into the host's secret store; triage the deferred minors from the Phase 5 and Phase 6 logs; verify the `app.py` page registration on the real app (AppTest cannot navigate callable pages); apply migration `0003` to the Supabase project (`alembic upgrade head`, with the user's approval) before the deployed app uses uploads; triage the Phase 6b deferred minors listed in its history.
 
 ## How to maintain this file
 When a task lands: tick its box, update the phase's `Done / Total` in the summary, and add the details to that phase's `history.md`.
