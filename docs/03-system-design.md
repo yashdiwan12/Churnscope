@@ -30,13 +30,14 @@ flowchart TD
     asv --> met["services/metrics"]
     asv --> sch["schemas/analytics"]
     er --> ing["services/ingestion"]
-    dr --> dep["api/dependencies.py<br/>auth, dataset access"]
+    dr --> authz["core/authorization<br/>user, profile, allow-list"]
     dr --> upl["services/uploads"]
     dr --> ups["services/upload_scoring"]
     dr --> dds["db/datasets"]
-    upl --> ing
-    ups --> pred
-    upl --> dds
+    pred --> ups
+    upl --> ups
+    dr --> pred
+    dds --> upl
     dds --> mod
     fe["frontend/dataset.py<br/>selector, context"] --> dr
     fup["frontend/views/upload.py"] --> dr
@@ -53,7 +54,7 @@ flowchart TD
     sec -.-> er
 
     class main,health,ar,asv,repo,met,sch,ing,evs,mod,ses,cfg,cr,pred,feat,art built
-    class er,dr,dep,upl,ups,dds,fe,fup built
+    class er,dr,upl,ups,dds,fe,fup built
     class rr,sec planned
     classDef built fill:#d1fae5,stroke:#059669,color:#064e3b
     classDef planned fill:#f3f4f6,stroke:#9ca3af,stroke-dasharray: 5 3,color:#374151

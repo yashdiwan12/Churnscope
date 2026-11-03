@@ -1,6 +1,6 @@
 # 9. Local development
 
-> Everything through Phase 6b is real: backend, data, model, Google sign-in and authorization, the Streamlit dashboard and uploads (run `alembic upgrade head` to get migration `0003`). Phase 7a (quality, security, docs) is in progress; deployment (7b) is still to come. Tag changes in [history](10-project-history.md).
+> Everything through Phase 6b is real: backend, data, model, Google sign-in and authorization, the Streamlit dashboard and uploads (run `alembic upgrade head` to get migration `0003`). Phase 7a (quality, security, docs) is done; deployment (7b) is still to come. Tag changes in [history](10-project-history.md).
 
 ## 9.1 Prerequisites
 

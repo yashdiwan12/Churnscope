@@ -31,7 +31,7 @@ cp .env.example .env     # at the repo root
 docker compose up -d --wait                            # local Postgres on :5433
 ```
 
-Now edit `.env`. Set at least `DATABASE_URL=postgresql+psycopg://churnscope:churnscope@localhost:5433/churnscope` (the local Docker login from `docker-compose.yml`; the file's default is a placeholder) and `INGEST_API_KEY` (generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"`). Leave `ALLOWED_EMAILS` empty until you sign in. The `SUPABASE_*` values are only needed for sign-in and the frontend; every analytics route requires a signed-in user, so without them the API runs but returns 401 (`/health` and `/docs` work).
+Now edit `.env`. Set at least `DATABASE_URL=postgresql+psycopg://churnscope:churnscope@localhost:5433/churnscope` (the local Docker login from `docker-compose.yml`; the file's default is a placeholder) and `INGEST_API_KEY` (generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"`). Set `ALLOWED_EMAILS` to your Google address before you sign in (an empty list lets nobody in). The `SUPABASE_*` values are only needed for sign-in and the frontend; every analytics route requires a signed-in user, so without them the API runs but returns 401 (`/health` and `/docs` work).
 
 Then set up the database, data and model. Run the backend commands from `backend/` (it reads `../.env` relative to that directory):
 

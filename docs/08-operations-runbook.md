@@ -15,7 +15,7 @@
 | Symptom | Likely cause | Action |
 |---|---|---|
 | All requests 401 | Wrong JWT secret/JWKS, clock skew, expired session | Check `SUPABASE_*` env; sign out/in |
-| Dashboard shows "API unavailable" | API down, wrong `API_BASE_URL`, CORS | Check `/health`, frontend env, `CORS_ORIGINS` |
+| Dashboard shows "API unavailable" | API down, wrong `API_BASE_URL` | Check `/health` and the frontend env (the dashboard calls the API from its server, so CORS is not a cause) |
 | 503 on `/churn/predict` only | Artifact missing or schema mismatch | Verify artifact path/version; retrain or redeploy |
 | 503 everywhere | DB unreachable / pool exhausted | Check Supabase status, `DATABASE_URL`, pooler |
 | Duplicate counts after load | Different `event_id` per run | Ensure loader emits stable IDs |

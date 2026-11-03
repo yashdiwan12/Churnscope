@@ -37,7 +37,7 @@ Commit `.env.example`, never `.env`. Rotate any leaked credential immediately.
 | Malformed / oversized payload | Pydantic validation, size caps, event-name allow-list, timestamp bounds (no far-future or pre-2000 events, which would skew every default view) |
 | SQL injection | SQLAlchemy parameterised queries only; no string-built SQL |
 | Data leakage in logs/errors | Never log tokens or PII; generic error bodies; no stack traces |
-| Cross-origin abuse | CORS restricted to dashboard origin (CORS ≠ authentication) |
+| Cross-origin abuse | CORS empty by default; set `CORS_ORIGINS` only if a browser calls the API (CORS ≠ authentication) |
 | Model abuse / over-trust | Validated inputs; scores labelled as estimates |
 | Label/feature leakage | Features limited to data at cutoff; tested |
 

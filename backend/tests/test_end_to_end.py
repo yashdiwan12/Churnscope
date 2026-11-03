@@ -39,20 +39,24 @@ def clients(monkeypatch, session):
 def read_numbers(client):
     overview = client.get(OVERVIEW)
     funnel = client.get("/analytics/funnel")
-    assert overview.status_code == funnel.status_code == 200
+    retention = client.get("/analytics/retention", params={"periods": 4})
+    assert overview.status_code == funnel.status_code == retention.status_code == 200
     steps = {s["step"]: s["users"] for s in funnel.json()["steps"]}
+    cells = {(c["cohort"], c["period"]): c for c in retention.json()["cells"]}
+    p0, p1 = cells[("2026-01-05", 0)], cells[("2026-01-05", 1)]
     return (
         overview.json()["active_users"],
         overview.json()["new_users"],
         funnel.json()["eligible_users"],
         [steps[n] for n in ("signup", "onboarding_complete", "report_created")],
+        (p0["cohort_size"], p0["eligible"], p0["retained"], p1["retained"]),
     )
 
 
 def test_events_in_analytics_out(clients):
     posted = clients.post("/events", json=BODY, headers={"X-API-Key": KEY})
     assert posted.status_code == 200
-    expected = (3, 1, 4, [4, 3, 1])
+    expected = (3, 1, 4, [4, 3, 1], (3, 3, 3, 1))
     assert read_numbers(clients) == expected
 
     again = clients.post("/events", json=BODY, headers={"X-API-Key": KEY})
