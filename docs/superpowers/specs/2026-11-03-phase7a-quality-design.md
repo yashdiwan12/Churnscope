@@ -41,6 +41,17 @@ Fixed in 7a (each with a test):
 6. A stored upload name has path components and `..` removed (display only; never used as a path).
 7. Doc 03's module diagram shows the 6b modules and section 3.4 no longer says "route pending"; doc 05's ER diagram marks `datasets.owner_id` nullable.
 
+Added from the code review of Phases 6 and 6b (2026-11-03, range `588a778..main`):
+
+8. **No signup event.** An upload with no signup (none mapped, none derived) gets a new scoring result `no_signup` (reason `no_signup`) instead of crashing in `build_features` and being stored as `failed`. `fit` checks for signup events before building features. The Churn Risk page shows the existing "needs a signup event" message for `no_signup`, with no Retry (`frontend/views/churn.py`); its test uses a real `no_signup` result, not `scoring_method = None`.
+9. **Exact duplicate headers.** A header row with the same normalised name twice (for example `customer_id,customer_id`) is rejected with the same error as the case-variant duplicate. The check runs on the raw header names before pandas renames repeats.
+10. **Transient database errors during scoring.** `OperationalError`, `InterfaceError` and `DBAPIError` with `connection_invalidated` are not stored as `failed`: `POST /datasets/{id}/score` answers 503 `Database unavailable`, and after an import the dataset keeps its previous `scoring` (none) so the page offers Retry.
+11. **Import response after a scoring-store failure.** The 201 body after a committed import is built from values read before scoring starts, so a rollback in the scoring step never triggers a lazy load; the import still answers 201.
+12. **Preview history length.** The Upload preview computes history from the full timestamps, the same way the backend does (`(last - first) >= 28 days`), so "Churn Risk will work" matches the result after import; a test covers a 27.1-day file.
+13. **No pooled connection held during the upload body.** The upload routes read and size-check the multipart body before any database access: the profile is loaded after `read_form`, so a slow upload holds no connection. A test asserts no session is opened before the body is read.
+
+Accepted, written into Known limitations: demo dataset counts and `data_through` in `GET /datasets` are fixed at migration time; the churn cache's lock-removal/insert gap (duplicate scoring, no corruption) and the global generation bump on any eviction; the `risk_asc` sort re-sorting the whole frame per page and the repeated `max(event_timestamp)` query (speed only).
+
 Everything else from the Phase 5, 6 and 6b deferred lists is written into **section 8.6 Known limitations** of doc 08, one line each with the reason it is accepted (for example: login CSRF needs a cookie-bound state and the impact is limited to allow-listed users; no rate limit on `/datasets/check` while access is allow-listed; no automatic upload expiry, manual purge script; the 0.02 margin and floors are judgement calls). The history files point to that section.
 
 ### 4.3 Security pass
@@ -73,8 +84,8 @@ Deploying, Supabase migrations or writes, Google console changes, new features, 
 
 ## 7. Plan outline
 1. Traceability table and the two missing tests; model card re-check.
-2. Backend minor fixes (4.2 items 1, 2, 3, 5, 6).
-3. Frontend minor fix (item 4) and doc diagram fixes (item 7); Known limitations section.
+2. Backend minor fixes (4.2 items 1, 2, 3, 5, 6) and review fixes 8-11, 13.
+3. Frontend fixes (items 4, 8 page side, 12) and doc diagram fixes (item 7); Known limitations section.
 4. Security pass (4.3) and its fixes.
 5. Fresh-clone README run and README/doc 09 fixes.
 6. Screenshots (user step) and README links; progress and history.
