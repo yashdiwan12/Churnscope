@@ -21,14 +21,26 @@ Module dependencies (arrows point at what a module uses; dotted arrows are not b
 flowchart TD
     main["main.py<br/>app factory, CORS"] --> health["routes/health"]
     main --> ar["routes/analytics"]
-    main -.-> er["routes/events"]
+    main --> er["routes/events"]
+    main --> dr["routes/datasets"]
     main --> cr["routes/churn"]
     main -.-> rr["routes/reports"]
     ar --> asv["services/analytics"]
     asv --> repo["db/repositories"]
     asv --> met["services/metrics"]
     asv --> sch["schemas/analytics"]
-    er -.-> ing["services/ingestion"]
+    er --> ing["services/ingestion"]
+    dr --> authz["core/authorization<br/>user, profile, allow-list"]
+    dr --> upl["services/uploads"]
+    dr --> ups["services/upload_scoring"]
+    dr --> dds["db/datasets"]
+    pred --> ups
+    upl --> ups
+    dr --> pred
+    dds --> upl
+    dds --> mod
+    fe["frontend/dataset.py<br/>selector, context"] --> dr
+    fup["frontend/views/upload.py"] --> dr
     ing --> evs["schemas/events"]
     ing --> mod["db/models"]
     repo --> mod
@@ -42,7 +54,8 @@ flowchart TD
     sec -.-> er
 
     class main,health,ar,asv,repo,met,sch,ing,evs,mod,ses,cfg,cr,pred,feat,art built
-    class er,rr,sec planned
+    class er,dr,upl,ups,dds,fe,fup built
+    class rr,sec planned
     classDef built fill:#d1fae5,stroke:#059669,color:#064e3b
     classDef planned fill:#f3f4f6,stroke:#9ca3af,stroke-dasharray: 5 3,color:#374151
 ```
@@ -116,7 +129,7 @@ flowchart LR
     rule -- no --> inc["Not eligible yet:<br/>left out of the denominator"]
 ```
 
-## 3.4 Ingestion pipeline `[Built]` (service; route pending)
+## 3.4 Ingestion pipeline `[Built]`
 
 ```mermaid
 flowchart TD
@@ -138,7 +151,7 @@ In words:
 
 1. Read source → 2. validate columns/types → 3. normalise timestamps (UTC) and IDs → 4. check missing/invalid → 5. validate event names and property types, cap payload size → 6. dedupe by `event_id` → 7. insert with `ON CONFLICT (dataset_id, event_id) DO NOTHING` in a transaction → 8. record rejected-row reasons (no sensitive data in logs).
 
-Result reports `received`, `inserted`, `duplicates` (event_id already stored or repeated in the batch), `conflicts` (duplicates whose content differs from what is stored; the stored row wins) and `rejected` (index + reason; payload values are never echoed). `[Built]` as `services/ingestion.py`; the HTTP route is not built yet.
+Result reports `received`, `inserted`, `duplicates` (event_id already stored or repeated in the batch), `conflicts` (duplicates whose content differs from what is stored; the stored row wins) and `rejected` (index + reason; payload values are never echoed). `[Built]` as `services/ingestion.py`, served by `POST /events` (see 3.2).
 
 ## 3.5 Churn model design `[Built]`
 

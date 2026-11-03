@@ -333,3 +333,19 @@ def test_margin_is_exact_despite_float_error(monkeypatch):
     assert fit(recency_file(), NOW)["method"] == "logistic"
     _patch_metrics(monkeypatch, model_pr=0.819, rule_pr=0.8)
     assert fit(recency_file(), NOW)["method"] == "inactive_rule"
+
+
+def test_no_signup_is_unavailable_not_an_error():
+    # 300 customers, logins only, spread over 90 days: long enough to score, but no signup.
+    rows = [(f"c{i}", "login", D0 + ((i + k) % 91) * DAY) for i in range(300) for k in (0, 45)]
+    out = fit(frame(rows), NOW)
+    assert out["method"] == "unavailable"
+    assert out["reason"] == "no_signup"
+    assert out["history_days"] == 90.0
+    assert out["model"] is None and out["backtest"] is None
+
+
+def test_floor_too_few_train_non_churners():
+    y_train = pd.Series([1] * 30)  # every training label is a churner
+    y_test = pd.Series([1] * 100 + [0] * 100)  # the test floors are all met
+    assert upload_scoring._floor_failure(y_train, y_test) == "too_few_train_non_churners"

@@ -5,7 +5,7 @@ for a rejected file is fixed text chosen by the error's code; server text is nev
 """
 
 import json
-from datetime import date
+from datetime import datetime
 
 import streamlit as st
 
@@ -97,12 +97,16 @@ def _join(items: list[str]) -> str:
     return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} and {items[-1]}"
 
 
-def _history_days(check: dict) -> int | None:
+def _parse_ts(value) -> datetime:
+    return datetime.fromisoformat(str(value))
+
+
+def _history_days(check: dict) -> float | None:
     """Days between the first and last valid event, or None when the file has no valid event."""
     if not check["valid_rows"] or not check["first_event"] or not check["last_event"]:
         return None
-    first, last = str(check["first_event"])[:10], str(check["last_event"])[:10]
-    return (date.fromisoformat(last) - date.fromisoformat(first)).days
+    delta = _parse_ts(check["last_event"]) - _parse_ts(check["first_event"])
+    return delta.total_seconds() / 86400
 
 
 def _churn(mapped: set, check: dict) -> str:

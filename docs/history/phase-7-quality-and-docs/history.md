@@ -1,12 +1,45 @@
 # History — phase-7-quality-and-docs
 
-**Status:** not started
+**Status:** 7a done, merged into `main` on 2026-11-03 · 7b (deploy) not started
+
+Phase 7 is split: **7a** quality, security and docs (local only) and **7b** deploy, which gets its own spec. 7a spec: [2026-11-03-phase7a-quality-design.md](../../superpowers/specs/2026-11-03-phase7a-quality-design.md); plan: [2026-11-03-phase7a-quality.md](../../superpowers/plans/2026-11-03-phase7a-quality.md). Executed subagent-driven on branch `phase-7a-quality`; every task was independently reviewed.
 
 ## Done
 
-_Nothing yet._ Existing coverage from earlier phases (ingestion, analytics, model and artifact, auth/ownership, RLS tests; GitHub CI on every push) is the starting point for the final audit.
+- **Test coverage and missing tests** (Task 1): doc 08 section 8.7 maps every PLAN.md section 13 test item to its test. New `test_end_to_end.py` posts hand-built events through `POST /events` and checks overview, funnel and retention against hand-calculated numbers. New `test_failed_writes.py` shows a database error on each write path (`POST /events`, `POST /datasets`, `DELETE /datasets/{id}`, `POST /me/reports`) answers 503 and leaves no partial rows. The model card was re-checked against a fresh seeded training run and matches.
+- **Backend fixes** (Task 2, review items 1-3, 5, 6, 8-11, 13 of the spec): an upload with no signup event is scored `unavailable` / `no_signup` instead of crashing; transient database errors during scoring answer 503 and are never stored as `failed`; a replace during `/score` gives 404; the import answers 201 with the pre-scoring body; the upload body is read before a database connection is taken; exact duplicate headers are rejected; the scoped 422 handler matches only `/datasets` paths; `.` and `..` filenames get the default name; the purge script prints one error line and exits 1.
+- **Frontend and diagram fixes** (Task 3): the chosen dataset survives a failed `GET /datasets`; the Churn Risk page shows the "needs a signup event" message; the Upload preview counts history from exact timestamps; doc 03's module diagram and doc 05's ER diagram are current.
+- **Known limitations and security pass** (Task 4): doc 08 section 8.6 lists every accepted minor with its reason. Doc 06 section 6.6: a secret scan of all commits found no real secret; every logging call and error response was checked; `pip-audit` found nothing; the `security-review` skill found nothing; the CORS default is now empty (the dashboard calls the API from its server).
+- **Screenshots** (Task 6): seven PNGs in `docs/images/` (sign-in, overview, funnel, retention, engagement, churn risk, upload), all demo data; the signed-in email line was blanked before committing. Linked from the README.
+- **Fresh-clone README run** (Task 5): clone of branch `phase-7a-quality` into a scratch folder, `.env` from `.env.example` with local values, a throwaway database `churnscope_fresh` on the existing Docker Postgres (dropped afterwards; Supabase never touched). Ports 8000/8501 were busy, so 8010/8511 were used.
+
+| Step | Worked as written | Time | Gap and fix |
+|---|---|---|---|
+| `cp .env.example .env` | partly | - | "set DATABASE_URL" gave no local value (example is a placeholder); `INGEST_API_KEY` not mentioned. README and doc 09 now give both |
+| `docker compose up -d --wait` | yes (existing container reused) | - | - |
+| `uv sync` (backend) | yes | 2 s warm | - |
+| `alembic upgrade head` | yes (0001-0003) | 9 s | - |
+| `generate_events.py` | yes (2000 customers, 42,847 events) | 9 s | - |
+| `load_events.py` | yes | 39 s | time noted in README |
+| `app.ml.train --source db` | yes (test ROC AUC 0.879) | 5 s | - |
+| `uvicorn` | yes (`/health`, `/docs` 200) | - | README now says analytics routes return 401 without Supabase values |
+| `uv run pytest -q` (backend) | yes, 418 passed, 2 skipped | 65 s | skips are opt-in timing checks; stated |
+| frontend `uv sync` + `pytest -q` | not in README | 63 s, 203 passed | added to README |
+| Streamlit start | not in README | - | added; page and health respond; sign-in is the user's step |
+| doc 09 `curl /churn/predict` | no, 401 | - | doc now explains the bearer token |
+
+  The table is the first run. After the README fixes, a second fresh clone followed the fixed text step by step with the same results (backend 418 passed, 2 skipped; frontend 203 passed). Also added: bash/PowerShell note, port-in-use note. Status paragraph rewritten and a "What it does" section with image links added (images arrive in Task 6). Existing coverage from earlier phases (ingestion, analytics, model and artifact, auth/ownership, RLS tests; GitHub CI on every push) is the starting point for the final audit.
 
 ## Decisions
+- Phase 7 split into 7a (local) and 7b (deploy); 7b keeps the Google consent screen in Testing mode with named test users (2026-11-02).
+- An upload with no signup event is scoring method `unavailable` with reason `no_signup`, an existing method, so no new value reaches the frontend.
+- The model card's Random Forest row stays on the database-trained numbers; the CSV run differs in the third decimal, which the card already notes.
+- A replace during the import's own scoring step still answers 201 (the import is committed); only `POST /datasets/{id}/score` answers 404.
+- Screenshot file names follow what was captured (`sign-in.png`, `churn-risk.png`, plus `engagement.png`).
 
-## Notes
-- Inherited items are listed at the end of the Phase 7 section in `progress.md`.
+## Results
+- Backend: 418 passed, 2 skipped (opt-in timing checks); frontend: 203 passed; ruff clean. All against local Docker Postgres; Supabase was not touched.
+
+## Open
+- Phase 7b deploy: the items are listed at the end of the Phase 7 section in `progress.md`.
+- Accepted minors: doc 08 section 8.6.

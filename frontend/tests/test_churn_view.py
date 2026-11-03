@@ -512,8 +512,8 @@ def test_upload_without_scoring_offers_retry(monkeypatch):
     assert ("POST", "/datasets/7/score") in [(m, p) for m, p, _ in requested.calls]
 
 
-def test_upload_without_signup_names_the_missing_signup(monkeypatch):
-    row = upload_row(None, churn=False)
+def test_no_signup_upload_shows_needs_signup(monkeypatch):
+    row = upload_row("unavailable", churn=False)
     row["capabilities"] = row["capabilities"] | {"retention": False}
     at, requested = upload_app(monkeypatch, row, {})
     shown = texts(run(at))
@@ -521,5 +521,16 @@ def test_upload_without_signup_names_the_missing_signup(monkeypatch):
         "Churn Risk needs a signup event. Map one of your events to signup, or re-upload with "
         '"first event counts as signup".'
     ) in shown
+    assert "Churn Risk needs at least 28 days" not in shown
+    assert "Retry scoring" not in [b.label for b in at.get("button")]
+    assert calls(requested) == []
+
+
+def test_short_history_with_signup_still_shows_short_history(monkeypatch):
+    row = upload_row("unavailable", churn=False)
+    at, requested = upload_app(monkeypatch, row, {})
+    shown = texts(run(at))
+    assert "needs a signup event" not in shown
+    assert "28 days" in shown
     assert "Retry scoring" not in [b.label for b in at.get("button")]
     assert calls(requested) == []

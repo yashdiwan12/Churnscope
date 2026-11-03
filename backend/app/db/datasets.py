@@ -58,18 +58,20 @@ def delete_upload(session: Session, user_id: uuid.UUID, dataset_id: int) -> bool
     return result.rowcount > 0
 
 
-def set_scoring(session: Session, dataset_id: int, scoring: dict) -> None:
+def set_scoring(session: Session, dataset_id: int, scoring: dict) -> bool:
     """Store an upload's scoring JSON (spec 5a) in its own transaction. Commits.
 
-    The caller evicts the dataset's churn-cache entries.
+    False when no row was updated (the upload was deleted or replaced meanwhile). The caller
+    evicts the dataset's churn-cache entries.
     """
     try:
-        session.execute(
+        result = session.execute(
             update(Dataset)
             .where(Dataset.id == dataset_id, Dataset.kind == "upload")
             .values(scoring=scoring)
         )
         session.commit()
+        return result.rowcount == 1
     except BaseException:
         session.rollback()
         raise

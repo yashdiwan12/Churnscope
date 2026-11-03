@@ -129,6 +129,23 @@ def test_datasets_failure_shows_fixed_error_and_no_page(monkeypatch):
     assert "/analytics/overview" not in requested
 
 
+def test_selection_survives_one_failed_dataset_list(monkeypatch):
+    at, _ = app(monkeypatch)
+    run(at)
+    at.sidebar.selectbox(key="dataset_id").select(7)
+    run(at)
+    at.routes["/datasets"] = (503, {"detail": "down"})
+    shown = texts(run(at))
+    assert "The service is unavailable. Please try again shortly." in shown
+    # Streamlit drops a widget's state when a run ends without rendering it; AppTest keeps it.
+    del at.session_state["dataset_id"]
+    at.routes["/datasets"] = DATASETS_WITH_UPLOAD
+    shown = texts(run(at))
+    assert at.sidebar.selectbox(key="dataset_id").value == 7
+    assert FALLBACK not in shown
+    assert UPLOAD_BANNER in shown
+
+
 def view_script(view_name, row):
     import importlib
 

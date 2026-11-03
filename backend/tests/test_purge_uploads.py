@@ -1,7 +1,7 @@
 import uuid
 
 import pytest
-from sqlalchemy import func, select, text
+from sqlalchemy import create_engine, func, select, text
 
 from app.db.datasets import DEMO_DATASET_ID
 from app.db.models import Customer, Dataset, Event, UserProfile
@@ -81,3 +81,15 @@ def test_days_must_be_a_positive_integer(value, session):
     with pytest.raises(SystemExit) as exc:
         purge_uploads.main(["--older-than", value])
     assert exc.value.code == 2
+
+
+def test_connection_error_prints_one_line_and_exits_1(monkeypatch, capsys):
+    unreachable = create_engine(
+        "postgresql+psycopg://user:secret@127.0.0.1:1/nowhere", connect_args={"connect_timeout": 2}
+    )
+    monkeypatch.setattr(purge_uploads, "get_engine", lambda: unreachable)
+    assert purge_uploads.main(["--older-than", "30"]) == 1
+    err = capsys.readouterr().err
+    assert len(err.splitlines()) == 1
+    assert err.startswith("purge failed: ")
+    assert "secret" not in err and "Traceback" not in err

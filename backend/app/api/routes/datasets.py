@@ -1,14 +1,18 @@
 import logging
+import uuid
 from pathlib import PureWindowsPath
 from typing import Annotated
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, Response
 from fastapi.concurrency import run_in_threadpool
-from sqlalchemy.exc import InterfaceError, OperationalError, SQLAlchemyError
+from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import ObjectDeletedError
 
-from app.core.authorization import current_profile
+from app.core import authorization
+from app.core.authorization import current_profile, current_user
+from app.core.security import AuthUser
 from app.db import datasets as datasets_db
 from app.db import repositories
 from app.db.models import Dataset, UserProfile
@@ -28,6 +32,7 @@ logger = logging.getLogger("churnscope.datasets")
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
 Profile = Annotated[UserProfile, Depends(current_profile)]
+User = Annotated[AuthUser, Depends(current_user)]
 SessionDep = Annotated[Session, Depends(get_session)]
 DatasetId = Annotated[int, Path(ge=1, le=2**63 - 1)]
 
@@ -40,9 +45,10 @@ def rejection(err: uploads.UploadRejected) -> HTTPException:
 
 
 def clean_filename(filename: str | None) -> str:
-    """The last path part (Windows or POSIX separators), at most 100 chars."""
+    """The last path part (Windows or POSIX separators), at most 100 chars. Empty, "." and ".."
+    become the default name."""
     name = PureWindowsPath(filename or "").name.strip()[:MAX_NAME_CHARS]
-    return name or DEFAULT_FILENAME
+    return DEFAULT_FILENAME if name in ("", ".", "..") else name
 
 
 def dataset_out(dataset: Dataset) -> DatasetOut:
@@ -93,8 +99,8 @@ def list_datasets(profile: Profile, session: SessionDep) -> list[DatasetOut]:
 
 
 @router.post("/check", response_model=CheckOut)
-async def check_upload(request: Request, profile: Profile) -> CheckOut:
-    """Parse and summarise a CSV. Stores nothing."""
+async def check_upload(request: Request, user: User) -> CheckOut:
+    """Parse and summarise a CSV. Stores nothing, so it needs no session or profile row."""
     # The body is read by hand (not a declared File parameter) so the size limits are enforced
     # before FastAPI would buffer the upload.
     try:
@@ -111,36 +117,64 @@ def _parse_and_prepare(form: uploads.UploadForm) -> uploads.Prepared:
     return uploads.prepare(parsed, mapping, derive, acknowledged)
 
 
-def run_scoring(session: Session, dataset: Dataset) -> None:
+def _transient(exc: Exception) -> bool:
+    """A lost or unreachable database: worth a retry, not a stored ``FAILED``."""
+    if isinstance(exc, (OperationalError, InterfaceError)):
+        return True
+    return isinstance(exc, DBAPIError) and bool(exc.connection_invalidated)
+
+
+def run_scoring(session: Session, dataset: Dataset) -> bool:
     """Spec 5a for one upload, stored on its row in a transaction of its own.
 
     A failure while fitting is stored as ``FAILED`` (the page then offers a Retry) and logged by
-    exception type only: the message or traceback could carry values from the file. Storing the
-    result can still raise a database error, which the caller handles.
+    exception type only: the message or traceback could carry values from the file. A transient
+    database error is re-raised instead and nothing is stored. Storing the result can still raise
+    a database error, which the caller handles. False when the row was gone by the time the
+    result was stored (deleted or replaced meanwhile).
     """
     try:
         events = repositories.load_events(session, dataset.id)
         scoring = upload_scoring.fit(events, pd.Timestamp.now(tz="UTC"))
-    except Exception as exc:  # noqa: BLE001 - any failure leaves the import intact
+    except Exception as exc:
         session.rollback()
+        if _transient(exc):
+            raise
         logger.error("scoring failed: %s", type(exc).__name__)
         scoring = dict(upload_scoring.FAILED)
-    datasets_db.set_scoring(session, dataset.id, scoring)
+    stored = datasets_db.set_scoring(session, dataset.id, scoring)
     prediction.evict_dataset(dataset.id)
-    session.refresh(dataset)
+    if stored:
+        session.refresh(dataset)
+    return stored
 
 
-def _score_after_import(session: Session, dataset: Dataset) -> None:
-    """The import has committed, so its 201 stands whatever happens here."""
+def _score_after_import(session: Session, dataset: Dataset) -> DatasetOut:
+    """The import has committed, so its 201 stands whatever happens here.
+
+    The response is built before scoring, so a failure needs no further SQL: it is the dataset as
+    imported, with no scoring method.
+    """
+    before = dataset_out(dataset)
     try:
-        run_scoring(session, dataset)
+        if run_scoring(session, dataset):
+            return dataset_out(dataset)
     except SQLAlchemyError as exc:
         session.rollback()
         logger.error("storing scoring failed: %s", type(exc).__name__)
+    return before
+
+
+def _store_upload(
+    session: Session, user_id: uuid.UUID, filename: str, prepared: uploads.Prepared
+) -> Dataset:
+    # The profile row is made only now, after the body has been read and checked.
+    profile = authorization.ensure_profile(session, user_id)
+    return datasets_db.replace_upload(session, profile.id, filename, prepared)
 
 
 @router.post("", response_model=ImportOut, status_code=201)
-async def import_upload(request: Request, profile: Profile, session: SessionDep) -> ImportOut:
+async def import_upload(request: Request, user: User, session: SessionDep) -> ImportOut:
     """Import a CSV as the caller's upload, replacing the previous one in one transaction.
 
     Multipart fields: `file`, `mapping` (JSON object), `derive_signup` and
@@ -153,9 +187,9 @@ async def import_upload(request: Request, profile: Profile, session: SessionDep)
         raise rejection(err) from None
     try:
         dataset = await run_in_threadpool(
-            datasets_db.replace_upload,
+            _store_upload,
             session,
-            profile.id,
+            user.id,
             clean_filename(form.filename),
             prepared,
         )
@@ -171,9 +205,9 @@ async def import_upload(request: Request, profile: Profile, session: SessionDep)
         # type only and drop the chain so no traceback with them reaches the server log.
         logger.error("import failed: %s", type(exc).__name__)
         raise HTTPException(500, "Import failed") from None
-    await run_in_threadpool(_score_after_import, session, dataset)
+    out = await run_in_threadpool(_score_after_import, session, dataset)
     return ImportOut(
-        dataset=dataset_out(dataset),
+        dataset=out,
         imported_events=len(prepared.events),
         derived_signups=prepared.derived_signups,
         ignored_rows=prepared.ignored_rows,
@@ -191,12 +225,19 @@ def score_dataset(dataset_id: DatasetId, profile: Profile, session: SessionDep) 
     if dataset is None or dataset.id != dataset_id:
         raise HTTPException(404, "Dataset not found")
     try:
-        run_scoring(session, dataset)
+        stored = run_scoring(session, dataset)
+    except ObjectDeletedError:  # replaced or deleted between storing and re-reading
+        stored = False
     except (OperationalError, InterfaceError):
         raise  # the app's 503 handler, which logs only the exception type
     except SQLAlchemyError as exc:
+        if _transient(exc):  # e.g. an invalidated connection: same answer as the 503 handler
+            logger.error("database unavailable on score: %s", type(exc).__name__)
+            raise HTTPException(503, "Database unavailable") from None
         logger.error("storing scoring failed: %s", type(exc).__name__)
         raise HTTPException(500, "Scoring failed") from None
+    if not stored:
+        raise HTTPException(404, "Dataset not found")
     return dataset_out(dataset)
 
 

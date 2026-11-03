@@ -10,6 +10,7 @@ import argparse
 import sys
 
 from sqlalchemy import delete, func, select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db.models import Dataset
@@ -46,8 +47,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--older-than", type=positive_int, required=True, metavar="DAYS")
     parser.add_argument("--dry-run", action="store_true", help="count only, delete nothing")
     args = parser.parse_args(argv)
-    with Session(get_engine()) as session:
-        count = purge(session, args.older_than, args.dry_run)
+    try:
+        with Session(get_engine()) as session:
+            count = purge(session, args.older_than, args.dry_run)
+    except SQLAlchemyError as exc:  # the message can carry the database URL: type name only
+        print(f"purge failed: {type(exc).__name__}", file=sys.stderr)
+        return 1
     if args.dry_run:
         print(f"dry run: {count} upload(s) older than {args.older_than} day(s) would be deleted")
     else:

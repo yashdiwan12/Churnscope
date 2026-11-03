@@ -60,6 +60,10 @@ def select(api: ApiClient, me: dict) -> Context:
     if not by_id:  # the API always lists the demo; treat an empty list as unavailable
         render_error(ServiceUnavailable("no datasets"), retry_key="dataset_retry")
         st.stop()
+    # A failed list stops the run before the selectbox renders, and Streamlit drops the widget's
+    # state; the plain key below remembers the choice across that one run.
+    if "dataset_id" not in st.session_state and st.session_state.get("dataset_choice") in by_id:
+        st.session_state["dataset_id"] = st.session_state["dataset_choice"]
     if "dataset_id" in st.session_state and st.session_state["dataset_id"] not in by_id:
         st.session_state["dataset_id"] = DEMO_ID if DEMO_ID in by_id else next(iter(by_id))
         st.warning(FALLBACK_NOTICE)
@@ -69,6 +73,7 @@ def select(api: ApiClient, me: dict) -> Context:
         format_func=lambda dataset_id: _label(by_id[dataset_id]),
         key="dataset_id",
     )
+    st.session_state["dataset_choice"] = chosen
     row = by_id[chosen]
     own = next((r for r in by_id.values() if r["kind"] == "upload"), None)
     return Context(

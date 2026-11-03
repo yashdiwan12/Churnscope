@@ -4,6 +4,7 @@ Privacy rule for this module: no message, exception text or log line ever contai
 the uploaded file. Problems are reported as codes and 1-based data row numbers only.
 """
 
+import csv
 import hashlib
 import io
 import json
@@ -91,6 +92,16 @@ def parse_csv(raw: bytes, now: pd.Timestamp) -> ParsedFile:
         raw.decode("utf-8")
     except UnicodeDecodeError:
         raise UploadRejected("not_utf8", "The file must be UTF-8 text.") from None
+    # Checked on the raw header: pandas renames an exact repeat ("a", "a.1") before we see it.
+    try:
+        header = next(csv.reader(io.StringIO(raw.decode("utf-8-sig", errors="replace"))), [])
+    except csv.Error:  # its message can quote the header, so none is passed on
+        raise UploadRejected(
+            "missing_columns", "The file is not a well-formed CSV with a header row."
+        ) from None
+    names = [h.strip().lower() for h in header]
+    if any(names.count(c) > 1 for c in REQUIRED_COLUMNS + ("event_id",)):
+        raise UploadRejected("missing_columns", "A column name appears more than once.")
     try:
         with warnings.catch_warnings():
             # A row longer than the header is a ParserWarning with index_col=False; refuse it
@@ -116,8 +127,6 @@ def parse_csv(raw: bytes, now: pd.Timestamp) -> ParsedFile:
             "missing_columns", "The file is not a well-formed CSV with a header row."
         ) from None
     df.columns = [str(c).strip().lower() for c in df.columns]
-    if any(list(df.columns).count(c) > 1 for c in REQUIRED_COLUMNS + ("event_id",)):
-        raise UploadRejected("missing_columns", "A column name appears more than once.")
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
     if missing:
         raise UploadRejected(
