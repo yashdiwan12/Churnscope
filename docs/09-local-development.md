@@ -17,7 +17,7 @@ git clone <repo> && cd Churnscope
 cp .env.example .env        # repo root; fill in values; never commit .env
 ```
 
-For local use set at least `DATABASE_URL=postgresql+psycopg://churnscope:churnscope@localhost:5433/churnscope` (the example file's value is a placeholder) and `INGEST_API_KEY` (`python -c "import secrets; print(secrets.token_urlsafe(32))"`). `SUPABASE_URL`, `SUPABASE_JWT_SECRET`, `SUPABASE_ANON_KEY` and `ALLOWED_EMAILS` are needed only to sign in; without them the API still starts (`/health`, `/docs`) but every analytics route answers 401. The backend finds the repo-root `.env` from any directory. Commands below are bash; on Windows use Git Bash (or set `$env:PYTHONPATH='.'` in PowerShell).
+For local use set at least `DATABASE_URL=postgresql+psycopg://churnscope:churnscope@localhost:5433/churnscope` (the example file's value is a placeholder) and `INGEST_API_KEY` (`python -c "import secrets; print(secrets.token_urlsafe(32))"`). `SUPABASE_URL`, `SUPABASE_JWT_SECRET`, `SUPABASE_ANON_KEY` and `ALLOWED_EMAILS` are needed only to sign in; without them the API still starts (`/health`, `/docs`) but every analytics route answers 401. The backend reads `../.env`, resolved against the working directory, so run backend commands (uvicorn, alembic, scripts, pytest) from `backend/`. Commands below are bash; on Windows use Git Bash (or set `$env:PYTHONPATH='.'` in PowerShell).
 
 ## 9.3 Run
 
@@ -77,9 +77,9 @@ curl -X POST localhost:8000/churn/predict -H "Authorization: Bearer $ACCESS_TOKE
 ## 9.5 Tests
 
 ```bash
-cd frontend && uv run pytest -q  # no network or database needed
-cd backend && uv run pytest -q   # about 1 min; 2 skips are opt-in timing checks (CHURNSCOPE_TIMING=1). DB tests need Docker Postgres up; if the summary shows "skipped", it is down (`docker compose up -d`)
-cd backend && uv run ruff check . && uv run ruff format --check .
+(cd frontend && uv run pytest -q)  # no network or database needed
+(cd backend && uv run pytest -q)   # about 1 min; 2 skips are opt-in timing checks (CHURNSCOPE_TIMING=1). DB tests need Docker Postgres up; if the summary shows "skipped", it is down (`docker compose up -d`)
+(cd backend && uv run ruff check . && uv run ruff format --check .)
 ```
 
 Database tests use their own `churnscope_test` database on the same Postgres (created automatically; its schema is dropped on every run), so running the tests never touches data you loaded into `churnscope`. Under `CI` a missing database fails the run instead of skipping.

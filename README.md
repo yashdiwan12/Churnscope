@@ -24,8 +24,15 @@ The event data is **synthetic** (seeded generator); funnel and retention figures
 Prerequisites: Python 3.12, [uv](https://docs.astral.sh/uv/), Git, Docker. Commands are bash (on Windows use Git Bash, or set `PYTHONPATH` the PowerShell way).
 
 ```bash
-cp .env.example .env     # at the repo root; then edit it, see below
+cp .env.example .env     # at the repo root
 docker compose up -d --wait                            # local Postgres on :5433
+```
+
+Now edit `.env`. Set at least `DATABASE_URL=postgresql+psycopg://churnscope:churnscope@localhost:5433/churnscope` (the local Docker login from `docker-compose.yml`; the file's default is a placeholder) and `INGEST_API_KEY` (generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"`). Leave `ALLOWED_EMAILS` empty until you sign in. The `SUPABASE_*` values are only needed for sign-in and the frontend; every analytics route requires a signed-in user, so without them the API runs but returns 401 (`/health` and `/docs` work).
+
+Then set up the database, data and model. Run the backend commands from `backend/` (it reads `../.env` relative to that directory):
+
+```bash
 cd backend && uv sync
 uv run alembic upgrade head
 uv run python scripts/generate_events.py               # synthetic events -> data/processed/
@@ -34,19 +41,17 @@ PYTHONPATH=. uv run python -m app.ml.train --source db # train churn model -> ap
 uv run uvicorn app.main:app --reload                   # API docs at http://localhost:8000/docs
 ```
 
-In `.env`, set at least `DATABASE_URL=postgresql+psycopg://churnscope:churnscope@localhost:5433/churnscope` (the local Docker login from `docker-compose.yml`; the file's default is a placeholder) and `INGEST_API_KEY` (generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"`). Leave `ALLOWED_EMAILS` empty until you sign in. The `SUPABASE_*` values are only needed for sign-in and the frontend; every analytics route requires a signed-in user, so without them the API runs but returns 401 (`/health` and `/docs` work).
-
-In another terminal, run the tests (about 1 minute each; the backend's 2 skips are opt-in timing checks):
+In another terminal, from the repo root, run the tests (about 1 minute each; the backend's 2 skips are opt-in timing checks):
 
 ```bash
-cd backend && uv run pytest -q
-cd frontend && uv sync && uv run pytest -q
+(cd backend && uv run pytest -q)
+(cd frontend && uv sync && uv run pytest -q)
 ```
 
 And the dashboard (needs `SUPABASE_URL` and `SUPABASE_ANON_KEY` to get past the sign-in page):
 
 ```bash
-cd frontend && uv run --env-file ../.env streamlit run app.py   # http://localhost:8501
+(cd frontend && uv run --env-file ../.env streamlit run app.py)   # http://localhost:8501
 ```
 
 If port 8000 or 8501 is taken, pass `--port` to uvicorn or streamlit (and set `API_BASE_URL` / `APP_BASE_URL` to match).
