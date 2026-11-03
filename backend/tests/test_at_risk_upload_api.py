@@ -11,10 +11,13 @@ import uuid
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
 
 from app.core.authorization import current_user
 from app.core.security import AuthUser
+from app.db import repositories
 from app.db.models import Dataset, UserProfile
 from app.db.session import get_session
 from app.main import create_app
@@ -163,8 +166,10 @@ def test_upload_without_signup_cannot_show_churn(session, users):
     events = _history(40)
     events = events[events["event_name"] != "signup"]
     ds = do_import(c, events).json()["dataset"]
-    assert ds["scoring_method"] == "rule_unchecked"
+    assert ds["scoring_method"] == "unavailable"
+    assert stored_scoring(session, ds["id"])["reason"] == "no_signup"
     assert ds["capabilities"]["churn"] is False
+    assert ds["capabilities"]["retention"] is False
 
 
 def test_scoring_failure_keeps_dataset_and_retry_works(session, users, monkeypatch, caplog):
@@ -195,6 +200,39 @@ def test_scoring_failure_keeps_dataset_and_retry_works(session, users, monkeypat
     assert retry.json()["scoring_method"] == "inactive_rule"
     assert retry.json()["capabilities"]["churn"] is True
     assert c.get(URL, params={"dataset_id": ds["id"]}).json()["method"] == "inactive_rule"
+
+
+def test_transient_db_error_on_score_is_503_and_not_stored(session, users, monkeypatch):
+    c = client_for(session, users[0])
+    ds = do_import(c, _history(40)).json()["dataset"]
+    before = stored_scoring(session, ds["id"])
+
+    def down(*args, **kwargs):
+        raise OperationalError("x", {}, Exception())
+
+    monkeypatch.setattr(repositories, "load_events", down)
+    r = c.post(f"/datasets/{ds['id']}/score")
+    assert r.status_code == 503
+    assert r.json() == {"detail": "Database unavailable"}
+    assert stored_scoring(session, ds["id"]) == before
+
+
+def test_replace_during_score_is_404(engine, session, users, monkeypatch):
+    c = client_for(session, users[0])
+    ds = do_import(c, _history(40)).json()["dataset"]
+    real = upload_scoring.fit
+
+    def fit_then_replaced(events, now):
+        # Another request replaces (here: deletes) the upload while this one is fitting.
+        with Session(engine) as other:
+            other.execute(delete(Dataset).where(Dataset.id == ds["id"]))
+            other.commit()
+        return real(events, now)
+
+    monkeypatch.setattr(upload_scoring, "fit", fit_then_replaced)
+    r = c.post(f"/datasets/{ds['id']}/score")
+    assert r.status_code == 404
+    assert r.json() == NOT_FOUND
 
 
 def test_rescore_changes_the_cache_key(session, users):

@@ -6,6 +6,7 @@
 
 import hashlib
 import hmac
+import uuid
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException
@@ -66,17 +67,22 @@ def current_user(
     return user
 
 
+def ensure_profile(session: Session, user_id: uuid.UUID) -> UserProfile:
+    """The caller's ``user_profiles`` row, created on first use. May commit."""
+    profile = session.get(UserProfile, user_id)
+    if profile is None:  # the common path only reads; insert once, tolerating a concurrent insert
+        session.execute(pg_insert(UserProfile).values(id=user_id).on_conflict_do_nothing())
+        session.commit()
+        profile = session.get(UserProfile, user_id)
+        assert profile is not None
+    return profile
+
+
 def current_profile(
     user: Annotated[AuthUser, Depends(current_user)],
     session: Annotated[Session, Depends(get_session)],
 ) -> UserProfile:
-    profile = session.get(UserProfile, user.id)
-    if profile is None:  # the common path only reads; insert once, tolerating a concurrent insert
-        session.execute(pg_insert(UserProfile).values(id=user.id).on_conflict_do_nothing())
-        session.commit()
-        profile = session.get(UserProfile, user.id)
-        assert profile is not None
-    return profile
+    return ensure_profile(session, user.id)
 
 
 def ingest_key(x_api_key: Annotated[str | None, Header()] = None) -> None:

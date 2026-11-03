@@ -9,14 +9,17 @@ import uuid
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import event, func, select
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
+from app.api.routes.datasets import DEFAULT_FILENAME, clean_filename
+from app.core import authorization
 from app.core.authorization import current_user
 from app.core.config import get_settings
 from app.core.security import AuthUser
 from app.db import datasets as datasets_db
+from app.db import repositories
 from app.db.models import Customer, Dataset, Event, UserProfile
 from app.db.session import get_session
 from app.main import create_app
@@ -371,3 +374,62 @@ def test_deeply_nested_mapping_is_bad_mapping(session, users):
     )
     assert r.status_code == 422
     assert r.json()["detail"]["code"] == "bad_mapping"
+
+
+def _down(*args, **kwargs):
+    raise OperationalError("x", {}, Exception())
+
+
+def test_transient_db_error_after_import_keeps_201_and_no_scoring(session, users, monkeypatch):
+    monkeypatch.setattr(repositories, "load_events", _down)
+    r = do_import(client_for(session, users[0]), make_csv(3))
+    assert r.status_code == 201
+    ds = r.json()["dataset"]
+    assert ds["scoring_method"] is None
+    session.expire_all()
+    assert session.get(Dataset, ds["id"]).scoring is None
+
+
+def test_scoring_store_failure_emits_no_sql_after_it(engine, session, users, monkeypatch):
+    statements: list[str] = []
+
+    def count(conn, cursor, statement, *args):
+        statements.append(statement)
+
+    def store_fails(*args, **kwargs):
+        event.listen(engine, "before_cursor_execute", count)
+        _down()
+
+    monkeypatch.setattr(datasets_db, "set_scoring", store_fails)
+    try:
+        r = do_import(client_for(session, users[0]), make_csv(3))
+    finally:
+        if event.contains(engine, "before_cursor_execute", count):
+            event.remove(engine, "before_cursor_execute", count)
+    assert r.status_code == 201
+    assert r.json()["dataset"]["scoring_method"] is None
+    assert statements == []
+
+
+def test_body_is_read_before_any_db_access(session, users, monkeypatch):
+    calls: list[str] = []
+    read, profile = uploads.read_form, authorization.ensure_profile
+
+    async def read_form(request):
+        form = await read(request)
+        calls.append("read")
+        return form
+
+    def ensure_profile(*args, **kwargs):
+        calls.append("profile")
+        return profile(*args, **kwargs)
+
+    monkeypatch.setattr(uploads, "read_form", read_form)
+    monkeypatch.setattr(authorization, "ensure_profile", ensure_profile)
+    assert do_import(client_for(session, users[0]), make_csv(3)).status_code == 201
+    assert calls == ["read", "profile"]
+
+
+def test_dot_names_become_the_default_filename():
+    for name in ("..", ".", "a/..", "C:\\x\\.."):
+        assert clean_filename(name) == DEFAULT_FILENAME

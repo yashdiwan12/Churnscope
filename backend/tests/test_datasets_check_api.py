@@ -1,15 +1,21 @@
 """POST /datasets/check: parses and summarises an upload, stores nothing, never echoes input."""
 
+import asyncio
 import io
+import json
 import logging
 
 import pytest
+from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
+from starlette.requests import Request
 
+from app.core import authorization
 from app.db.models import Customer, Dataset, Event
 from app.db.session import get_session
-from app.main import create_app
+from app.main import create_app, validation_error
+from app.services import uploads
 from app.services.uploads import MAX_FILE_BYTES, MAX_REASONS, MAX_REQUEST_BYTES
 from tests.auth_helpers import act_as_allowed_user
 
@@ -151,3 +157,38 @@ def test_other_routes_keep_default_validation_body(session):
     r = TestClient(app).get("/other/_probe", params={"n": "abc"})
     assert r.status_code == 422
     assert all("input" in i for i in r.json()["detail"])
+
+
+def test_body_is_read_before_any_db_access(client, monkeypatch):
+    calls: list[str] = []
+    read, profile = uploads.read_form, authorization.ensure_profile
+
+    async def read_form(request):
+        form = await read(request)
+        calls.append("read")
+        return form
+
+    def ensure_profile(*args, **kwargs):
+        calls.append("profile")
+        return profile(*args, **kwargs)
+
+    monkeypatch.setattr(uploads, "read_form", read_form)
+    monkeypatch.setattr(authorization, "ensure_profile", ensure_profile)
+    assert post(client, HEAD + "u1,login,2026-01-05T00:00:00Z\n").status_code == 200
+    assert calls == ["read"]  # the check stores nothing, so it needs no profile row
+
+
+def _validation_body(path: str) -> list[dict]:
+    request = Request({"type": "http", "method": "GET", "path": path, "headers": []})
+    exc = RequestValidationError(
+        [{"type": "int_parsing", "loc": ("query", "n"), "msg": "bad", "input": "SECRET-123"}]
+    )
+    response = asyncio.run(validation_error(request, exc))
+    assert response.status_code == 422
+    return json.loads(response.body)["detail"]
+
+
+def test_scoped_422_does_not_cover_other_prefixes():
+    assert all("input" in i for i in _validation_body("/datasets-foo"))
+    for path in ("/datasets", "/datasets/check"):
+        assert all(set(i) == {"loc", "msg"} for i in _validation_body(path))

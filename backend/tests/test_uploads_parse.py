@@ -177,6 +177,14 @@ def test_duplicate_required_header_is_rejected():
     assert err.status == 422
 
 
+def test_exact_duplicate_header_is_rejected():
+    err = rejected(
+        b"customer_id,customer_id,event_name,event_timestamp\nu,v,login,2026-01-01T00:00:00Z\n"
+    )
+    assert err.code == "missing_columns"
+    assert err.message == "A column name appears more than once."
+
+
 NUL = chr(0)
 
 

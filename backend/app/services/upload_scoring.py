@@ -4,7 +4,8 @@
 gap so no training label overlaps the test period), fits the logistic pipeline on the earlier
 ones and compares it with the days-since-last-activity rule on the held-out rows. The model is
 used only when its PR-AUC beats the rule's by at least ``MARGIN``; otherwise the rule is used.
-Too little data for a fair test falls back to the unchecked rule, or to nothing at all.
+Too little data for a fair test falls back to the unchecked rule, or to nothing at all; so does a
+file with no signup event (method ``unavailable``, reason ``no_signup``).
 
 The result is plain JSON stored on the dataset row. The fitted model is kept as numbers (scaler
 means and scales, coefficients, intercept) and applied by ``json_proba``, a dot product, so
@@ -97,6 +98,8 @@ def fit(events: pd.DataFrame, now: pd.Timestamp) -> dict:
     history_days = round(float((through - first) / _DAY), 1)
     if through - first < features.WINDOW_DAYS * _DAY:
         return _result("unavailable", "short_history", now, history_days)
+    if not (events["event_name"] == "signup").any():  # nobody can be scored without a signup
+        return _result("unavailable", "no_signup", now, history_days)
 
     cutoffs = features.make_cutoffs(first, through)[-MAX_CUTOFFS:]
     try:

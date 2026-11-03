@@ -45,7 +45,8 @@ async def database_unavailable(request: Request, exc: Exception) -> JSONResponse
 
 async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
     """422 for /datasets: field path and message only, never the input or its context."""
-    if request.url.path.startswith("/datasets"):
+    path = request.url.path
+    if path == "/datasets" or path.startswith("/datasets/"):
         detail = [{"loc": list(e["loc"]), "msg": e["msg"]} for e in exc.errors()]
         return JSONResponse(status_code=422, content={"detail": detail})
     return await request_validation_exception_handler(request, exc)
