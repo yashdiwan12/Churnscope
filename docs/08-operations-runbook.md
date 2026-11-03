@@ -63,3 +63,32 @@ Supabase managed backups cover the database; confirm the plan's retention. Demo 
 ## 8.6 Known limitations
 
 No performance or scale figures are claimed until measured. The public churn dataset has no temporal validity. Single instance, no HA.
+
+## 8.7 Test coverage
+
+Each bullet of PLAN.md section 13 and the test that checks it. Backend tests are in `backend/tests/`, frontend tests in `frontend/tests/`.
+
+| PLAN.md item | Test file | Test function(s) |
+|---|---|---|
+| Valid event accepted | `test_ingestion.py` | `test_valid_events_inserted_and_customer_created` |
+| Invalid event rejected | `test_ingestion.py` | `test_invalid_events_rejected_with_reason_and_valid_ones_kept` |
+| Duplicate event handled safely | `test_ingestion.py` | `test_reingesting_same_batch_creates_no_duplicates`, `test_duplicate_within_one_batch_and_overlapping_batches`, `test_concurrent_ingestion_of_same_events_does_not_duplicate` |
+| Invalid timestamp or oversized payload rejected | `test_ingestion.py`, `test_events_api.py` | `test_future_and_ancient_timestamps_are_rejected`, `test_body_over_5mb_is_413_before_parsing`, `test_more_than_5000_events_is_422` |
+| Active-user counts match hand-calculated examples | `test_metrics.py`, `test_analytics_api.py` | `test_active_users_counts_distinct_qualifying_in_half_open_window`, `test_overview_hand_checked` |
+| Funnel ordering and denominator are correct | `test_metrics.py`, `test_analytics_api.py` | `test_funnel_ordering_window_and_censoring`, `test_funnel_hand_checked_with_default_window` |
+| Retention handles incomplete cohorts | `test_metrics.py`, `test_analytics_api.py` | `test_retention_cells_and_incomplete_periods`, `test_retention_marks_incomplete_cells` |
+| Empty ranges return meaningful results | `test_metrics.py`, `test_analytics_api.py` | `test_active_users_empty_range_is_zero`, `test_empty_database_returns_zeros_not_errors` |
+| Time-zone boundaries are consistent | `test_metrics.py` | `test_rejects_naive_timestamps`, `test_week_boundary_uses_utc_monday` |
+| Missing/invalid token is rejected for protected endpoints | `test_authorization.py`, `test_security.py` | `test_missing_or_malformed_authorization_is_401`, `test_invalid_tokens_are_401`, `test_rejected_with_invalid_token` |
+| User A cannot access User B's private records | `test_me_api.py`, `test_reports.py` | `test_users_cannot_list_or_delete_each_others_reports_in_either_direction`, `test_users_only_see_their_own_reports` |
+| Client-supplied identity cannot override verified identity | `test_me_api.py` | `test_bad_report_bodies_are_422` (a `user_id` field is a 422), `test_me_returns_token_identity_and_creates_the_profile_once` |
+| Secrets never appear in responses or logs | `test_events_api.py`, `test_authorization.py`, `test_security.py`, `test_datasets_import_api.py`, `test_uploads_parse.py` | `test_key_never_appears_in_responses_or_logs`, `test_responses_and_logs_do_not_contain_the_token`, `test_error_messages_never_contain_the_token`, `test_database_error_on_import_never_logs_file_values`, `test_no_file_value_in_any_message` |
+| Training and inference use the same feature schema | `test_ml.py`, `test_churn_api.py` | `test_model_uses_exactly_the_feature_schema`, `test_serving_matches_training_features_exactly` |
+| Preprocessing is fitted on training data only | `test_ml.py` | `test_preprocessing_is_fitted_on_training_rows_only` |
+| Future information does not enter features | `test_features.py` | `test_future_events_never_change_features`, `test_labels_use_only_the_horizon` |
+| Model artifact/version is recorded | `test_ml.py`, `test_churn_api.py` | `test_artifact_round_trip_preserves_predictions`, `test_model_version_changes_with_hyperparameters`, `test_scores_hand_checked_and_preserves_request_order` |
+| Malformed inputs are handled | `test_churn_api.py`, `test_ml.py` | `test_invalid_requests_are_422`, `test_malformed_metadata_is_unavailable_not_a_crash` |
+| Evaluation can be reproduced | `test_ml.py` | `test_training_is_reproducible` |
+| Dashboard handles API errors | `frontend/tests/test_api_client.py`, `frontend/tests/test_gate.py` | `test_status_mapping`, `test_me_other_4xx_shows_the_unavailable_message_not_a_traceback` |
+| Database failures do not appear as successful writes | `test_failed_writes.py`, `test_ingestion.py`, `test_db_unavailable.py` | `test_failed_write_is_never_2xx`, `test_failed_write_rolls_back_everything`, `test_database_failures_are_503_without_details` |
+| Event-to-analytics flow works on a small test dataset | `test_end_to_end.py` | `test_events_in_analytics_out` |
