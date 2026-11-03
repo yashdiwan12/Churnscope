@@ -231,6 +231,9 @@ def score_dataset(dataset_id: DatasetId, profile: Profile, session: SessionDep) 
     except (OperationalError, InterfaceError):
         raise  # the app's 503 handler, which logs only the exception type
     except SQLAlchemyError as exc:
+        if _transient(exc):  # e.g. an invalidated connection: same answer as the 503 handler
+            logger.error("database unavailable on score: %s", type(exc).__name__)
+            raise HTTPException(503, "Database unavailable") from None
         logger.error("storing scoring failed: %s", type(exc).__name__)
         raise HTTPException(500, "Scoring failed") from None
     if not stored:

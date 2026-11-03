@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.authorization import current_user
@@ -211,6 +211,21 @@ def test_transient_db_error_on_score_is_503_and_not_stored(session, users, monke
         raise OperationalError("x", {}, Exception())
 
     monkeypatch.setattr(repositories, "load_events", down)
+    r = c.post(f"/datasets/{ds['id']}/score")
+    assert r.status_code == 503
+    assert r.json() == {"detail": "Database unavailable"}
+    assert stored_scoring(session, ds["id"]) == before
+
+
+def test_invalidated_connection_on_score_is_503_and_not_stored(session, users, monkeypatch):
+    c = client_for(session, users[0])
+    ds = do_import(c, _history(40)).json()["dataset"]
+    before = stored_scoring(session, ds["id"])
+
+    def lost(*args, **kwargs):
+        raise DBAPIError("x", {}, Exception(), connection_invalidated=True)
+
+    monkeypatch.setattr(repositories, "load_events", lost)
     r = c.post(f"/datasets/{ds['id']}/score")
     assert r.status_code == 503
     assert r.json() == {"detail": "Database unavailable"}

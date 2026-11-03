@@ -33,7 +33,7 @@ Gaps: (a) no test runs events through `POST /events` and checks analytics output
 
 ### 4.2 Minor findings: fix list
 Fixed in 7a (each with a test):
-1. A replace during `POST /datasets/{id}/score` or the import's refresh returns 404 `Dataset not found`, not 500.
+1. A replace during `POST /datasets/{id}/score` returns 404 `Dataset not found`, not 500. During the import's own scoring step the import still answers 201 with the pre-scoring body (item 11).
 2. The scoped 422 handler matches `/datasets` and `/datasets/...` only, not `/datasets-foo` (`backend/app/main.py`).
 3. `scripts/purge_uploads.py` prints one line naming the error type on a connection failure, never a traceback or the URL, and exits non-zero.
 4. The data selector keeps the user's chosen dataset after a transient `GET /datasets` error (shows the error state, does not switch to demo).
