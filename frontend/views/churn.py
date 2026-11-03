@@ -237,7 +237,7 @@ def render(api: ApiClient, ctx: Context) -> None:
         unit="days_inactive" if days else "risk_score",
     )
     if figure is not None:
-        st.plotly_chart(figure, width="stretch")
+        st.container(border=True).plotly_chart(figure, width="stretch")
 
     sort_labels = _DAYS_SORT_LABELS if days else _SORT_LABELS
     page_column, sort_column = st.columns(2)

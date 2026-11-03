@@ -39,17 +39,17 @@ def render(api: ApiClient, ctx: Context) -> None:
 
     active = result["active_users"]
     cards = st.columns(4)
-    cards[0].metric("Active users", f"{active:,}")
-    cards[1].metric("New users", f"{result['new_users']:,}")
-    cards[2].metric("Returning users", f"{result['returning_users']:,}")
-    cards[3].metric("Qualifying events", f"{result['qualifying_events']:,}")
+    cards[0].metric("Active users", f"{active:,}", border=True)
+    cards[1].metric("New users", f"{result['new_users']:,}", border=True)
+    cards[2].metric("Returning users", f"{result['returning_users']:,}", border=True)
+    cards[3].metric("Qualifying events", f"{result['qualifying_events']:,}", border=True)
     rate = result["returning_user_rate"]
     if rate is not None:
         cards[2].caption(f"{rate * 100:.1f}% of active users (n={active:,})")
 
     figure = dau_line(result["daily_active_users"])
     if figure is not None:
-        st.plotly_chart(figure, width="stretch")
+        st.container(border=True).plotly_chart(figure, width="stretch")
     names = ", ".join(result["qualifying_event_names"])
     with st.expander("What counts as activity"):
         st.caption(f"Activity means any of these events: {names}")

@@ -42,7 +42,7 @@ def render(api: ApiClient, ctx: Context) -> None:
     st.caption(f"Eligible users: {eligible:,}")
     figure = funnel_bar(steps)
     if figure is not None:
-        st.plotly_chart(figure, width="stretch")
+        st.container(border=True).plotly_chart(figure, width="stretch")
     previous_users = None
     for row in steps:
         line = f"{row['step']}: {row['users']:,} users"

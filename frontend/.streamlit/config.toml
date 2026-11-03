@@ -7,3 +7,28 @@ gatherUsageStats = false
 
 [server]
 maxUploadSize = 5
+
+# No `base` here: the viewer's OS setting picks light or dark. Values mirror frontend/theme.py.
+[theme]
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, sans-serif"
+headingFontWeights = [700, 600]
+baseRadius = "0.6rem"
+showWidgetBorder = true
+showSidebarBorder = true
+chartSequentialColors = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#3987e5", "#2a78d6", "#256abf", "#184f95", "#0d366b"]
+
+[theme.light]
+primaryColor = "#2a78d6"
+backgroundColor = "#fcfcfb"
+secondaryBackgroundColor = "#f3f4f6"
+textColor = "#0b0b0b"
+borderColor = "#e2e4e8"
+linkColor = "#2a78d6"
+
+[theme.dark]
+primaryColor = "#3987e5"
+backgroundColor = "#0f1419"
+secondaryBackgroundColor = "#161c25"
+textColor = "#e8eaed"
+borderColor = "#2a3340"
+linkColor = "#6da7ec"
