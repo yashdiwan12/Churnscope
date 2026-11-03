@@ -60,9 +60,37 @@ Structured logs (request id, route, status, latency). **Never** log tokens, pass
 
 Supabase managed backups cover the database; confirm the plan's retention. Demo data is synthetic/public, so loss is recoverable by re-running the generator and loader (seeded, deterministic). Uploads are the owners' own files and are not recoverable from the database: users keep their source file.
 
-## 8.6 Known limitations
+## 8.6 Known limitations `[Built]` (Phase 7a)
 
-No performance or scale figures are claimed until measured. The public churn dataset has no temporal validity. Single instance, no HA.
+No performance or scale figures are claimed until measured. The public churn dataset has no temporal validity. Single instance, no HA. Each line below is: what, why it is accepted, what would change it. Items fixed in Phase 7a are listed in the [Phase 7 history](history/phase-7-quality-and-docs/history.md), not here.
+
+**Authentication (Phase 5)**
+- A network blip while refreshing the token signs the user out. Accepted: the user signs in again and loses nothing stored. Would change: complaints, or a retry-once on refresh.
+- Login CSRF: the PKCE verifier is held by the server process, not the browser that began the flow, so an allow-listed attacker could hand a victim a sign-in link for the attacker's own account. Accepted: the attacker must already be allow-listed and the app shows only the signed-in account's own data. Would change: a cookie-bound state (needs a Streamlit component), or opening sign-up to the public.
+
+**Dashboard (Phase 6)**
+- One-time Streamlit log warning on the first sort change; the sort resets to default after an error or empty run. Cosmetic. Would change: a user report.
+- `/me` uses a 10 s timeout, so a cold database start shows "unavailable". Accepted: a reload fixes it. Would change: a measured free-tier cold start (Phase 7b).
+- Customer-id sort is lexicographic; the page number has no maximum; the default end date uses `date.today()`, not UTC. Cosmetic or off-by-a-day at midnight only. Would change: ids with a numeric meaning, or users in far time zones.
+
+**Uploads, backend (Phase 6b)**
+- Demo dataset counts and `data_through` in `GET /datasets` are fixed at migration time. The demo data never changes after the loader runs. Would change: live events into the demo dataset.
+- The churn cache removes a per-key lock and inserts the entry in two separate critical sections, so two requests can score the same dataset twice (no corruption). Any eviction bumps one global generation, so other datasets' in-flight results are dropped once. Speed only, at a 4-entry cache. Would change: more concurrent users than the allow-list allows.
+- `risk_asc` re-sorts the whole frame for each page and the max event timestamp is queried again per request. Speed only at 50,000 events. Would change: a measured slow page.
+- The model-wins test fixture is a 21-day cycle; LRU recency is untested; the tests use a literal 1 for the demo id. Test quality only.
+- `default_cutoff` keeps a silent demo default; models drift from migration 0003 (Identity, FK names); E501 is not enforced. Code hygiene. Would change: the next change in those files.
+- Mapping value checks run after the parse; up to 5 MiB is parsed before the row limit applies; blank lines count as invalid rows; out-of-range timestamps are reported as `bad_timestamp`, not `timestamp_out_of_range`; optional columns other than `event_id` may repeat under different names. Accepted: results are still correct and the 5 MB cap bounds the work. Would change: abuse, or user confusion about messages.
+- `db/datasets.py` imports `services/uploads` (a layering cycle) and the `too_many_customers` message and skip-reason slicing are duplicated. Hygiene. Would change: a third caller.
+
+**Uploads, frontend (Phase 6b)**
+- The demo banner no longer shows before sign-in (nothing is shown before sign-in). Would change: a public landing page.
+- Import gate and preview compute "has activity" separately; escape tests do not cover backslashes or a render round trip; the replace caption's escaping, the `/datasets/check` timeout path and the `current_upload` test seam restore are untested or loose. Test and hygiene items, no known wrong output.
+
+**Product**
+- No rate limit on `POST /datasets/check`. Accepted while access is allow-listed and the body is capped at 5 MB. Would change: public sign-up, then a limit at the host or in the API.
+- No automatic upload expiry; `scripts/purge_uploads.py` is run by hand (8.2a). Would change: a retention promise to users, then a scheduled job (Phase 7b).
+- The 0.02 PR-AUC margin and the scoring floors are judgement calls. Would change: evidence from real files that they pick the wrong method.
+- Profile deletion (`user_profiles`) is not automated; deleting an account's rows is a manual operation. Would change: a user-facing delete-account feature.
 
 ## 8.7 Test coverage
 

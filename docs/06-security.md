@@ -87,11 +87,27 @@ Users can upload their own events. The file may hold real customer identifiers, 
 
 ## 6.5 Security checklist (Phase 7 gate)
 
-- [ ] No secrets in Git history (`git log -p` scan)
+- [x] No secrets in Git history (`git log -p --all` scan of 98 commits, 2026-11-03; section 6.6)
 - [x] Missing / invalid / expired / wrong-user token tests pass (`test_security.py`, `test_authorization.py`, `test_me_api.py`)
 - [x] Client-supplied identity cannot override verified identity (`user_id` in a body is a 422; owner comes from the token)
-- [ ] Logs contain no tokens or unnecessary personal data
-- [ ] CORS lists only required origins
+- [x] Logs contain no tokens or unnecessary personal data (all 10 `logger.` calls in `backend/app` log exception type names or fixed text; section 6.6)
+- [ ] CORS lists only required origins (the code default is now empty and tested in `test_health.py`; the deployed value is set with the dashboard URL in Phase 7b, so the box closes there)
 - [x] RLS enabled on exposed tables and tested (`tests/test_rls.py`; checked on the Supabase project)
-- [ ] Error responses expose no internals
-- [ ] Dependencies reviewed (`pip-audit`)
+- [x] Error responses expose no internals (all 28 `HTTPException` sites and both `JSONResponse` handlers return fixed text or field paths; section 6.6)
+- [x] Dependencies reviewed (`pip-audit` on both locked environments, 2026-11-03: no known vulnerabilities; section 6.6)
+
+## 6.6 Phase 7a security pass
+
+Run on 2026-11-03 on branch `phase-7a-quality`, local only (no Supabase connection, no `.env` read).
+
+| Check | What was run | Result |
+|---|---|---|
+| Secrets in Git history | `git log -p --all` (98 commits, about 47,000 lines) searched for key, secret, password, `service_role`, JWT-shaped strings, database URLs with a password, Google/Supabase/GitHub/AWS key shapes and private-key headers; files ever added matching `.env`, `.pem`, `.key`, `client_secret` | 300 keyword hits, all classified: test fixtures (`ingest-key-0123...`, `user:secret@127.0.0.1:1`, `user:password@host`), the local Docker database login (`churnscope`, defined in `docker-compose.yml`, localhost only), `https://p.supabase.co`-style placeholders, header names and doc text. No JWT-shaped string, no key or private-key header, no real project URL. Only `.env.example` was ever committed as an env file. **No real secret found; nothing rewritten.** |
+| Logs | grep of `logger.` in `backend/app`: 10 calls (5 in `routes/datasets.py`, 4 in `main.py`, 1 in `services/uploads.py`) | Every call logs a fixed text, a counter, the model version or `type(exc).__name__`. The one `logger.warning` that formats an exception (`churn model unavailable: %s`) uses `ModelUnavailable`, whose messages are fixed strings in `ml/artifact.py`. `logger.exception` in the lifespan hook records a traceback for a model-load failure only (no request data). No tokens, emails or file values. |
+| Error responses | grep of `HTTPException` and `JSONResponse` in `backend/app`: 28 `HTTPException` sites, 2 `JSONResponse` | All fixed messages, upload `code` and `message` pairs, or field path plus message. Two sites pass `str(exc)` from `analytics.InvalidRange`, whose texts are fixed (`start must be before end`, `window must not exceed N days`). Unhandled errors give FastAPI's plain 500. Accepted: on routes outside `/datasets`, `/events` and `/me`, FastAPI's default 422 echoes the caller's own query or body input back to that caller; nothing from other users or the server. |
+| CORS | `Settings.cors_origins` | **Finding, fixed:** the code default was `http://localhost:8501`, not empty. It is now empty, so no cross-origin access exists unless `CORS_ORIGINS` is set; two tests in `test_health.py` (unset gives an empty list, a list is split and trimmed). The Streamlit app calls the API from its server, so it needs no CORS entry. Methods stay `GET, POST, DELETE` and headers `Authorization, Content-Type` (`X-API-Key` is not allowed cross-origin, tested). |
+| Frontend exposure | grep of `os.getenv`, `os.environ`, `st.secrets` in `frontend/` (not tests, not `.venv`) | Only `gate.py` reads configuration: `API_BASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `APP_BASE_URL`. No other variable and no `st.secrets` use. The only `unsafe_allow_html` that includes a variable is the sign-in link, whose URL goes through `html.escape(quote=True)`. |
+| Dependencies | `uv export --format requirements-txt` per project, then `uvx pip-audit --no-deps --disable-pip` on the export (backend 55 pinned packages, frontend 44) | No known vulnerabilities in either. No upgrade needed. |
+| Code review | `security-review` skill unavailable here as a separate run; done by hand over `git diff main...HEAD` plus a pass over `backend/app` and `frontend`: every route's dependency (analytics and churn: `current_user`; events: `ingest_key`; me and datasets: user or profile; health open by design), raw SQL (one `pg_advisory_xact_lock` with a bound parameter, no string-built SQL), `eval`/`pickle`/`subprocess` use (the model artifact is the only unpickle and is hash-checked), and the Task 2-3 changes (no-signup path, transient 503, body-before-profile) | No further findings. |
+
+Outcome: one finding (CORS default), fixed with tests. Remaining open box: CORS in 6.5 until Phase 7b sets the deployed origin. Tests after the pass: backend 418 passed (2 opt-in timing tests skipped), frontend 203 passed with `-W error`; ruff clean in both.

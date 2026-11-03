@@ -9,7 +9,8 @@ class Settings(BaseSettings):
     database_url: str = ""
     supabase_url: str = ""
     supabase_jwt_secret: str = ""
-    cors_origins: str = "http://localhost:8501"
+    # Empty by default: no cross-origin access. The dashboard calls the API server-side, so it needs none.
+    cors_origins: str = ""
     # Optional trusted pin for the model artifact's SHA-256 (see app/ml/artifact.py).
     churn_model_sha256: str = ""
 

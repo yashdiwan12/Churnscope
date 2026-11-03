@@ -23,6 +23,7 @@ One independent whole-branch review (most capable model, read-only). No auth byp
 A chunked request with a conflicting `Content-Length` was checked live: the server answers 400 before our code runs.
 
 ## Deferred minors
+Accepted and written up in [doc 08 section 8.6](../../08-operations-runbook.md#86-known-limitations-built-phase-7a).
 - A network blip while refreshing the token signs the user out (any refresh failure clears the session).
 - Login CSRF: the PKCE verifier is tied to the server process, not the browser that started the flow, so an allow-listed attacker could hand a victim a sign-in link for the attacker's own account. Low impact (the attacker must be allow-listed; the app shows only the account's own data). A cookie-bound state needs a Streamlit component and is left for a later hardening pass.
 
