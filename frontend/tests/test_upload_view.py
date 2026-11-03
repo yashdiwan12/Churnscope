@@ -261,6 +261,14 @@ def test_preview_churn_needs_28_days_of_history():
     assert upload.preview(mapping, False, edge)["Churn Risk"] == upload.CHURN_OK
 
 
+def test_preview_uses_exact_timestamps():
+    mapping = {"Sign Up": "signup", "login": "login"}
+    short = CHECK_OK | {"first_event": "2026-01-01T23:00:00Z", "last_event": "2026-01-29T01:00:00Z"}
+    assert upload.preview(mapping, False, short)["Churn Risk"] == upload.CHURN_SHORT
+    ok = short | {"last_event": "2026-01-29T23:00:00Z"}
+    assert upload.preview(mapping, False, ok)["Churn Risk"] == upload.CHURN_OK
+
+
 def test_invalid_character_skip_has_fixed_copy():
     line = upload._skip_line({"row": 3, "code": "invalid_character"})
     assert line == "row 3: a value contains a character that cannot be stored"

@@ -126,11 +126,11 @@ def _rescore(api: ApiClient, ctx: Context) -> None:
 
 
 def _upload_unavailable(api: ApiClient, ctx: Context) -> None:
-    if ctx.scoring_method == "unavailable":
-        render_empty(SHORT_HISTORY)
-    elif ctx.scoring_method is None and not ctx.capabilities.get("retention", True):
-        # Never scored and no signup: the same condition that switches Retention off.
+    if not ctx.capabilities.get("retention", True):
+        # No signup event: the same condition that switches Retention off, whatever the method.
         render_empty(NO_SIGNUP)
+    elif ctx.scoring_method == "unavailable":
+        render_empty(SHORT_HISTORY)
     elif ctx.scoring_method in ("failed", None):
         # None with a signup means the import committed but storing the score failed: Retry.
         render_empty(SCORING_FAILED)

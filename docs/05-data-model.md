@@ -24,7 +24,7 @@ erDiagram
 
     datasets {
         bigint id PK "1 = demo"
-        uuid owner_id FK "NULL for the demo"
+        uuid owner_id FK "nullable: NULL for the demo"
         text kind "demo or upload"
         text name
         text source_filename
