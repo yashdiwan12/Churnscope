@@ -1,6 +1,6 @@
 # 9. Local development
 
-> Everything through Phase 6b is real: backend, data, model, Google sign-in and authorization, and the Streamlit dashboard. Uploads (6b) are built and merged (run `alembic upgrade head` to get migration `0003`); deployment (7) is still to come. Tag changes in [history](10-project-history.md).
+> Everything through Phase 6b is real: backend, data, model, Google sign-in and authorization, the Streamlit dashboard and uploads (run `alembic upgrade head` to get migration `0003`). Phase 7a (quality, security, docs) is in progress; deployment (7b) is still to come. Tag changes in [history](10-project-history.md).
 
 ## 9.1 Prerequisites
 
@@ -14,8 +14,10 @@ Supabase note: use the **Session pooler** connection string; the direct `db.<ref
 git clone <repo> && cd Churnscope
 (cd backend && uv sync)      # creates backend/.venv from pyproject.toml + uv.lock
 (cd frontend && uv sync)
-cp .env.example .env        # fill in values; never commit .env
+cp .env.example .env        # repo root; fill in values; never commit .env
 ```
+
+For local use set at least `DATABASE_URL=postgresql+psycopg://churnscope:churnscope@localhost:5433/churnscope` (the example file's value is a placeholder) and `INGEST_API_KEY` (`python -c "import secrets; print(secrets.token_urlsafe(32))"`). `SUPABASE_URL`, `SUPABASE_JWT_SECRET`, `SUPABASE_ANON_KEY` and `ALLOWED_EMAILS` are needed only to sign in; without them the API still starts (`/health`, `/docs`) but every analytics route answers 401. The backend finds the repo-root `.env` from any directory. Commands below are bash; on Windows use Git Bash (or set `$env:PYTHONPATH='.'` in PowerShell).
 
 ## 9.3 Run
 
@@ -66,17 +68,17 @@ PYTHONPATH=. uv run python -m app.ml.train --source db      # writes app/ml/arti
 PYTHONPATH=. uv run python -m app.ml.train_telco            # supplementary; needs data/raw/telco_churn.csv
 ```
 
-The API loads `app/ml/artifacts/churn_model.joblib` at startup (hash, schema and version checked; optionally pinned with `CHURN_MODEL_SHA256`). Try it:
+The API loads `app/ml/artifacts/churn_model.joblib` at startup (hash, schema and version checked; optionally pinned with `CHURN_MODEL_SHA256`). `/churn/predict` requires a signed-in, allow-listed user, so a bare `curl` answers `401 Not authenticated`; use the interactive docs after signing in, or call it with a Supabase access token:
 
 ```bash
-curl -X POST localhost:8000/churn/predict -H 'Content-Type: application/json' -d '{"customer_ids": ["c00100", "c00275"]}'
+curl -X POST localhost:8000/churn/predict -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Content-Type: application/json' -d '{"customer_ids": ["c00100", "c00275"]}'
 ```
 
 ## 9.5 Tests
 
 ```bash
 cd frontend && uv run pytest -q  # no network or database needed
-cd backend && uv run pytest -q   # DB tests need Docker Postgres up; if the summary shows "skipped", it is down (`docker compose up -d`)
+cd backend && uv run pytest -q   # about 1 min; 2 skips are opt-in timing checks (CHURNSCOPE_TIMING=1). DB tests need Docker Postgres up; if the summary shows "skipped", it is down (`docker compose up -d`)
 cd backend && uv run ruff check . && uv run ruff format --check .
 ```
 
