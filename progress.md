@@ -4,7 +4,7 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 
 **Specs and plans:** `PLAN.md` and everything under `docs/superpowers/` (the design specs and implementation plans linked below) are local working notes. They are git-ignored since 2026-11-06, so those links open only on the author's machine, not on GitHub. The finished record of each phase is in `docs/history/` and docs 01-10.
 
-**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-11-06 · Phase 7a and the pre-deploy polish are merged into `main` (not yet pushed): backend 436 (2 opt-in timing tests skipped) and frontend 226 tests pass locally at the last full run
+**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-11-06 · Phase 7a, the pre-deploy polish and the first deploy (7b) are on `main` and pushed: backend 436 (2 opt-in timing tests skipped) and frontend 226 tests pass locally at the last full run
 
 ## Summary
 
@@ -18,7 +18,7 @@ Live tracker of implementation progress per phase. Detailed notes, decisions, an
 | 5 | Authentication & authorization | ✅ Done | 8 / 8 |
 | 6 | Dashboard | ✅ Done (merged) | 7 / 7 |
 | 6b | Bring your own data (uploads) | ✅ Done (merged) | 8 / 8 |
-| 7 | Quality & documentation | 🟡 7a done (merged); 7b deploy not started | 9 / 10 |
+| 7 | Quality & documentation | 🟡 7a done (merged); 7b deployed, live checks open | 9 / 10 |
 
 ## Phase 0 — Setup ✅  ([history](docs/history/phase-0-setup/history.md))
 - [x] Git repository exists
@@ -117,10 +117,12 @@ Split in two (decided 2026-11-02): **7a** quality, security and docs, local only
 - [x] Actual model evaluation documented (model card re-checked against a fresh seeded training run)
 - [x] Screenshots and setup instructions (seven screenshots in `docs/images/`, sign-in email removed; README followed from a fresh clone, gaps fixed)
 - [x] Secrets/logging/data-exposure review (doc 06 section 6.6: no secrets in history, logs and errors checked, pip-audit clean, CORS default empty)
-- [ ] Deploy after local workflow is reliable (Phase 7b)
+- [ ] Deploy after local workflow is reliable (Phase 7b): deployed 2026-11-06 (Render API, Streamlit Cloud dashboard) and Google sign-in works; the box closes when the remaining live checks in doc 07 section 7.8 are done
 - Done in 7a (not counted): deferred minors from Phases 5, 6 and 6b triaged; cheap ones fixed (no-signup uploads, transient database errors, duplicate headers, 422 scope, selection after a failed list, preview history and others), the rest listed with reasons in doc 08 section 8.6 Known limitations.
 - Done after 7a, before 7b (not counted; merged into `main` 2026-11-06): OS-following light and dark theme with shared chart colours; the Upload page renamed **Data & Uploads**; idle sign-out (`IDLE_TIMEOUT_MINUTES`, default 30); a wait for a sleeping API on first load (`API_WAKE_SECONDS`, off by default, set about 45 in the deployment); column matching for CSVs whose headers are not ours (`columns` form field on check and import); `PLAN.md` and `docs/superpowers/` no longer tracked. Column matching was tried by hand on `data/processed/trial/4_own_column_names.csv`. The wake-up wait is untested against a real Render service.
-- For 7b (not counted): set `API_WAKE_SECONDS` on the deployed frontend and confirm a real cold start fits it; add the deployed app URL to Supabase's redirect list and the Google client origins; keep the Google consent screen in Testing with named test users (decided); set `CORS_ORIGINS` only if a browser calls the API; optional open-access setting (`ALLOW_ANY_GOOGLE_USER`) and GitHub sign-in; move `ALLOWED_EMAILS` and keys into the host's secret store; verify the `app.py` page registration on the real app (AppTest cannot navigate callable pages); apply migration `0003` to the Supabase project (`alembic upgrade head`, with the user's approval) before the deployed app uses uploads.
+- Done in 7b (not counted): Render service `churnscope-api` and Streamlit app `churnscope-analytics` live; Supabase redirect list and Site URL set; `API_WAKE_SECONDS=60`; the Google sign-in link opens in a new tab because Streamlit Cloud's iframe blocks same-window sign-in (doc 07 section 7.7).
+- Still open for 7b (not counted): the live checks in doc 07 section 7.8 (not-allowed account, cold start, all five pages, an upload, idle sign-out); confirm the model loads on the live Churn Risk page; the README screenshots still show the old look.
+- Was the 7b to-do list (kept for reference): set `API_WAKE_SECONDS` on the deployed frontend and confirm a real cold start fits it; add the deployed app URL to Supabase's redirect list and the Google client origins; keep the Google consent screen in Testing with named test users (decided); set `CORS_ORIGINS` only if a browser calls the API; optional open-access setting (`ALLOW_ANY_GOOGLE_USER`) and GitHub sign-in; move `ALLOWED_EMAILS` and keys into the host's secret store; verify the `app.py` page registration on the real app (AppTest cannot navigate callable pages); apply migration `0003` to the Supabase project (`alembic upgrade head`, with the user's approval) before the deployed app uses uploads.
 
 ## How to maintain this file
 When a task lands: tick its box, update the phase's `Done / Total` in the summary, and add the details to that phase's `history.md`.

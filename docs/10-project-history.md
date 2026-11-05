@@ -33,7 +33,7 @@ flowchart LR
 | 5 | Auth | Google OAuth, JWT verification, ownership | Cross-user access fails safely | Done | [log](history/phase-5-auth/history.md) |
 | 6 | Dashboard | Streamlit pages wired to API | Core analytics flow works in UI | Done (merged into `main`) | [log](history/phase-6-dashboard/history.md) |
 | 6b | Bring your own data | User uploads, dataset ownership, churn report on own data | A user sees analytics for their own file and nobody else's | Done (merged into `main` 2026-11-02) | [log](history/phase-6-dashboard/history.md#phase-6b--bring-your-own-data-uploads) |
-| 7 | Quality & docs | Tests, security review, screenshots, deploy | New developer can follow README end to end | 7a done (merged into `main` 2026-11-03); pre-deploy polish merged locally 2026-11-06; 7b deploy not started | [log](history/phase-7-quality-and-docs/history.md) |
+| 7 | Quality & docs | Tests, security review, screenshots, deploy | New developer can follow README end to end | 7a done (merged into `main` 2026-11-03); pre-deploy polish merged 2026-11-06; 7b deployed 2026-11-06, live checks open | [log](history/phase-7-quality-and-docs/history.md) |
 
 ## Phase log template
 

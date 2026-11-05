@@ -28,7 +28,14 @@
 | Churn Risk says scoring failed, with Retry | Fitting threw an error; the dataset itself is intact | Click Retry (`POST /datasets/{id}/score`); if it keeps failing, check the log for `scoring failed: <ExceptionType>` (type only, by design) |
 | Churn Risk for an upload says not available and has no Retry | The import committed but storing the scoring result failed | Re-import the file, or `POST /datasets/{id}/score` |
 | Import times out in the UI | Cold free-tier database or a slow connection (the UI waits 60 s) | Retry: the file is re-sent from the session, and a replace that already committed is safe to repeat |
-| OAuth redirect error | Redirect URL not registered | Add URL in Supabase + Google Cloud |
+| OAuth redirect error | Redirect URL not registered | Add the dashboard address (with and without `/**`) in Supabase, Authentication, URL Configuration |
+| After Google, the browser lands on `localhost:8501/?code=...` | Return address not on Supabase's list, so it fell back to the Site URL | Add `<dashboard>` and `<dashboard>/**` to Redirect URLs and set the Site URL to the dashboard address |
+| Google shows "403. That's an error" in the dashboard | The sign-in link opened inside Streamlit Cloud's iframe (old `_self` link) | Use the new-tab link (current code); doc 07 section 7.7 |
+| Sign in button does nothing on Streamlit Cloud | A `_top` link is blocked by the iframe sandbox | Same: the current link opens a new tab |
+| Google "access blocked" or `access_denied` | The account is not a test user on the consent screen | Add it under the consent screen's test users |
+| "This account is not allowed" after Google works | Email not on Render's `ALLOWED_EMAILS` | Add it to the one comma-separated line; Render redeploys |
+| Render logs `uvicorn: command not found` (status 127) | Start command lacks `uv run` | `uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| First visit shows "Waking up the service…" for a while | Render free tier was asleep | Wait; the dashboard retries for `API_WAKE_SECONDS` (60) |
 
 ## 8.2a Uploads `[Built]` (Phase 6b)
 
@@ -91,6 +98,11 @@ No performance or scale figures are claimed until measured. The public churn dat
 - No automatic upload expiry; `scripts/purge_uploads.py` is run by hand (8.2a). Would change: a retention promise to users, then a scheduled job (Phase 7b).
 - The 0.02 PR-AUC margin and the scoring floors are judgement calls. Would change: evidence from real files that they pick the wrong method.
 - Profile deletion (`user_profiles`) is not automated; deleting an account's rows is a manual operation. Would change: a user-facing delete-account feature.
+
+- Sign-in opens in a new tab on Streamlit Community Cloud; same-window sign-in is not possible there (doc 07, section 7.7). Would change: hosting the dashboard outside an iframe.
+- Both free tiers sleep (Render after about 15 idle minutes, Streamlit after a few idle days). The first visit is slow by design. Would change: a paid plan or a keep-warm ping.
+- The wake-up wait covers the first call of a page load only; if the API sleeps in the middle of a session, a later call shows "service unavailable" with Retry.
+- Migrations are applied by hand, not on deploy.
 
 ## 8.7 Test coverage
 

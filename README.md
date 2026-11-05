@@ -6,6 +6,8 @@ Product analytics and churn-intelligence platform: turns user-activity events in
 
 A signed-in user sees a Streamlit dashboard over product-event data, backed by a FastAPI API: **Overview** (active users, events, trends), **Funnel** (step conversion), **Retention** (cohort grid), **Engagement** (activity and feature use) and **Churn Risk** (customers ranked by predicted churn, sortable). **Data & Uploads** lets a user import their own events CSV, map its event names, and see the same pages for their file only, with churn scored by a method trained on that file.
 
+Live demo: https://churnscope-analytics.streamlit.app (sign-in is limited to named test users).
+
 Screenshots (demo data):
 
 ![Sign-in](docs/images/sign-in.png)
@@ -18,7 +20,7 @@ Screenshots (demo data):
 
 ## Status
 
-Phases 0-7a are done and merged: data and metric definitions, database and idempotent ingestion, analytics API, churn model (see the [model card](docs/model_card.md)), Google sign-in through Supabase with an email allow-list, the Streamlit dashboard, per-user CSV uploads with churn trained on the file (6b), and a quality, security and docs pass (7a: test coverage table, fixes, security review, a README checked from a fresh clone). Phase 7b (deploy to Render and Streamlit Community Cloud, Google sign-in in Testing mode with named users) is still to come. Live tracker: [progress.md](progress.md).
+Phases 0-7a are done and merged, and the app is **deployed** (7b): data and metric definitions, database and idempotent ingestion, analytics API, churn model (see the [model card](docs/model_card.md)), Google sign-in through Supabase with an email allow-list, the Streamlit dashboard, per-user CSV uploads with churn trained on the file (6b), and a quality, security and docs pass (7a: test coverage table, fixes, security review, a README checked from a fresh clone). Phase 7b put the API on Render and the dashboard on Streamlit Community Cloud (https://churnscope-analytics.streamlit.app); Google sign-in is in Testing mode, limited to named test users, so only they can sign in. The live page-by-page checks are listed in [doc 07, section 7.8](docs/07-infrastructure-and-deployment.md). Both hosts are free tiers that sleep, so the first visit can take a minute, and Google sign-in opens in a new tab. Live tracker: [progress.md](progress.md).
 
 The event data is **synthetic** (seeded generator); funnel and retention figures reflect its assumptions, not real customer behaviour. The IBM Telco dataset is used only as a supplementary tabular churn dataset (see [data/README.md](data/README.md)).
 
