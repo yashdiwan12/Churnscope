@@ -3,6 +3,7 @@
 import pandas as pd
 import plotly.graph_objects as go
 
+import theme
 from labels import percent
 
 LOW_N_MIN_ELIGIBLE = 20  # a retention cell with fewer eligible users is labelled "low n"
@@ -17,6 +18,8 @@ def dau_line(daily_active_users: list[dict]) -> go.Figure | None:
             y=[row["active_users"] for row in daily_active_users],
             mode="lines+markers",
             name="Daily active users",
+            line={"color": theme.SERIES, "width": 2},
+            marker={"color": theme.SERIES, "size": 8},
         )
     )
     fig.update_layout(
@@ -24,8 +27,8 @@ def dau_line(daily_active_users: list[dict]) -> go.Figure | None:
         xaxis_title="Date (UTC)",
         yaxis_title="Active users",
         yaxis_rangemode="tozero",
-        margin={"t": 40, "b": 40},
     )
+    fig.update_layout(theme.LAYOUT)
     return fig
 
 
@@ -43,14 +46,15 @@ def funnel_bar(steps: list[dict]) -> go.Figure | None:
             text=labels,
             textposition="auto",
             name="Users",
+            marker={"color": theme.SERIES},
         )
     )
     fig.update_layout(
         title="Users reaching each step",
         xaxis_title="Users",
         yaxis={"autorange": "reversed"},
-        margin={"t": 40, "b": 40},
     )
+    fig.update_layout(theme.LAYOUT)
     return fig
 
 
@@ -67,6 +71,7 @@ def adoption_bars(feature_adoption: dict[str, float]) -> go.Figure | None:
             text=[percent(share) for _, share in ranked],
             textposition="auto",
             name="Share of active users",
+            marker={"color": theme.SERIES},
         )
     )
     fig.update_layout(
@@ -74,8 +79,8 @@ def adoption_bars(feature_adoption: dict[str, float]) -> go.Figure | None:
         xaxis_title="Share of active users",
         xaxis={"tickformat": ".0%", "range": [0, 1]},
         yaxis={"autorange": "reversed"},
-        margin={"t": 40, "b": 40},
     )
+    fig.update_layout(theme.LAYOUT)
     return fig
 
 
@@ -163,7 +168,10 @@ def retention_heatmap(matrix: pd.DataFrame) -> go.Figure | None:
                 z=rates,
                 zmin=0,
                 zmax=1,
-                colorscale="Blues",
+                colorscale=[
+                    [i / (len(theme.SEQUENTIAL) - 1), colour]
+                    for i, colour in enumerate(theme.SEQUENTIAL)
+                ],
                 colorbar={"title": "Retention", "tickformat": ".0%"},
                 texttemplate="%{text}",
                 hoverongaps=False,
@@ -171,7 +179,7 @@ def retention_heatmap(matrix: pd.DataFrame) -> go.Figure | None:
             ),
             go.Heatmap(
                 z=incomplete,
-                colorscale=[[0, "#bdbdbd"], [1, "#bdbdbd"]],
+                colorscale=[[0, theme.INCOMPLETE], [1, theme.INCOMPLETE]],
                 showscale=False,
                 texttemplate="%{text}",
                 hoverongaps=False,
@@ -184,8 +192,8 @@ def retention_heatmap(matrix: pd.DataFrame) -> go.Figure | None:
         xaxis_title="Weeks since signup",
         yaxis_title="Signup week (Monday)",
         yaxis={"autorange": "reversed", "type": "category"},
-        margin={"t": 40, "b": 40},
     )
+    fig.update_layout(theme.LAYOUT)
     return fig
 
 
@@ -206,17 +214,29 @@ def risk_histogram(
         go.Bar(
             x=[(row["bin_start"] + row["bin_end"]) / 2 for row in bins],
             y=[row["count"] for row in bins],
-            width=[row["bin_end"] - row["bin_start"] for row in bins],
+            width=[(row["bin_end"] - row["bin_start"]) * 0.92 for row in bins],  # small gap
             customdata=[
                 f"{edge.format(row['bin_start'])} to {edge.format(row['bin_end'])}" for row in bins
             ],
             hovertemplate=f"{label} %{{customdata}}<br>%{{y}} customers<extra></extra>",
             name="Customers",
+            marker={
+                "color": [
+                    theme.AT_RISK if row["bin_start"] >= threshold else theme.SERIES for row in bins
+                ]
+            },
+            showlegend=False,
         )
     )
+    for name, colour in (("Not at risk", theme.SERIES), ("At risk", theme.AT_RISK)):
+        # legend-only entries: the bar colours are never the only way to tell the groups apart
+        fig.add_trace(
+            go.Bar(x=[None], y=[None], name=name, marker={"color": colour}, hoverinfo="skip")
+        )
     fig.add_vline(
         x=threshold,
         line_dash="dash",
+        line_width=1,
         annotation_text=(
             f"at risk from {threshold:g} days" if days else f"decision threshold {threshold:.2f}"
         ),
@@ -226,6 +246,8 @@ def risk_histogram(
         xaxis_title=label,
         yaxis_title="customers",
         xaxis={"range": [0, bins[-1]["bin_end"]] if days else [0, 1]},
-        margin={"t": 40, "b": 40},
+        barmode="overlay",
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 1, "xanchor": "right"},
     )
+    fig.update_layout(theme.LAYOUT)
     return fig

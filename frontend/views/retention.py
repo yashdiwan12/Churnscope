@@ -47,7 +47,7 @@ def render(api: ApiClient, ctx: Context) -> None:
             "Some cells are incomplete: their cohort has not had the full period to return yet, "
             "so they are shown in grey and not coloured by their rate."
         )
-    st.plotly_chart(figure, width="stretch")
+    st.container(border=True).plotly_chart(figure, width="stretch")
     with st.expander("Cell details"):
         st.dataframe(
             retention_table(matrix),

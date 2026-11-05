@@ -2,10 +2,12 @@
 
 import html
 import re
+import time
 
 import pytest
 from streamlit.testing.v1 import AppTest
 
+import gate
 from tests.fake_api import APP, ME_OK, OVERVIEW_OK, install, run, signed_in_app, texts
 
 NOT_ALLOWED = "This account is not allowed to use Churnscope."
@@ -135,3 +137,108 @@ def test_me_other_4xx_shows_the_unavailable_message_not_a_traceback(monkeypatch)
     assert "Active users" not in shown and "Window:" not in shown
     assert "404" not in shown and "no such route" not in shown
     assert requested == ["/me"]
+
+
+# --- idle sign-out: a session untouched for IDLE_TIMEOUT_MINUTES ends on the next interaction ---
+
+LOGOUT = "/auth/v1/logout"
+
+
+def idle_app(monkeypatch, idle_seconds, **env):
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    routes = {"/me": (200, ME_OK), "/analytics/overview": (200, OVERVIEW_OK), LOGOUT: (204, None)}
+    at, requested = signed_in_app(monkeypatch, routes)
+    at.session_state["last_seen"] = time.time() - idle_seconds
+    return at, requested
+
+
+def test_session_idle_past_the_limit_is_signed_out_with_a_notice(monkeypatch):
+    at, requested = idle_app(monkeypatch, idle_seconds=31 * 60)
+    run(at)
+    assert "tokens" not in at.session_state
+    assert len(sign_in_anchors(at)) == 1
+    assert "signed out after 30 minutes of inactivity" in texts(at)
+    assert "Active users" not in texts(at)
+    assert "/me" not in requested  # the API is never asked once the session has expired
+    assert LOGOUT in requested  # the refresh token is revoked on the server too
+
+
+def test_session_within_the_limit_stays_signed_in_and_stamps_activity(monkeypatch):
+    at, _ = idle_app(monkeypatch, idle_seconds=10 * 60)
+    before = time.time()
+    run(at)
+    assert "tokens" in at.session_state
+    assert "inactivity" not in texts(at)
+    assert at.session_state["last_seen"] >= before
+
+
+def test_idle_limit_is_configurable_and_zero_turns_it_off(monkeypatch):
+    at, _ = idle_app(monkeypatch, idle_seconds=2 * 60, IDLE_TIMEOUT_MINUTES="1")
+    run(at)
+    assert "tokens" not in at.session_state
+    assert "after 1 minute of inactivity" in texts(at)
+
+    at, _ = idle_app(monkeypatch, idle_seconds=99 * 3600, IDLE_TIMEOUT_MINUTES="0")
+    run(at)
+    assert "tokens" in at.session_state
+
+
+def test_a_bad_idle_setting_falls_back_to_the_default(monkeypatch):
+    at, _ = idle_app(monkeypatch, idle_seconds=31 * 60, IDLE_TIMEOUT_MINUTES="soon")
+    run(at)
+    assert "tokens" not in at.session_state
+
+
+# --- cold start: a sleeping host answers 503 for a while; the gate waits instead of giving up ---
+
+
+def waking_app(monkeypatch, answers, wake_seconds="45"):
+    """The first `/me` answers come from `answers` (status codes); the last one repeats."""
+    monkeypatch.setenv("API_WAKE_SECONDS", wake_seconds)
+    pauses = []
+    monkeypatch.setattr(gate, "_pause", pauses.append)
+    calls = iter(answers)
+    last = [answers[-1]]
+
+    def me():
+        status = next(calls, last[0])
+        return (status, ME_OK if status == 200 else {"detail": "waking"})
+
+    routes = {"/me": me, "/analytics/overview": (200, OVERVIEW_OK)}
+    at, requested = signed_in_app(monkeypatch, routes)
+    return at, requested, pauses
+
+
+def test_a_sleeping_service_is_waited_for_and_then_the_page_loads(monkeypatch):
+    at, requested, pauses = waking_app(monkeypatch, [503, 503, 200])
+    run(at)
+    assert requested.count("/me") == 3
+    assert len(pauses) == 2 and all(p > 0 for p in pauses)
+    assert "Active users" in texts(at)
+    assert UNAVAILABLE not in texts(at)
+
+
+def test_a_service_that_never_wakes_ends_in_the_usual_unavailable_message(monkeypatch):
+    clock = iter(range(0, 1000, 20))  # every look at the clock is 20 s later
+    monkeypatch.setattr(gate, "_now", lambda: next(clock))
+    at, requested, _ = waking_app(monkeypatch, [503])
+    run(at)
+    assert UNAVAILABLE in texts(at)
+    assert 1 < requested.count("/me") < 10  # it tried again, then gave up
+    assert "Active users" not in texts(at)
+
+
+def test_waiting_is_off_by_default_so_a_down_local_api_fails_fast(monkeypatch):
+    monkeypatch.delenv("API_WAKE_SECONDS", raising=False)
+    at, requested = signed_in_app(monkeypatch, {"/me": (503, {"detail": "x"})})
+    run(at)
+    assert requested.count("/me") == 1
+    assert UNAVAILABLE in texts(at)
+
+
+def test_a_403_is_never_retried(monkeypatch):
+    at, requested, pauses = waking_app(monkeypatch, [403])
+    run(at)
+    assert requested.count("/me") == 1 and pauses == []
+    assert NOT_ALLOWED in texts(at)

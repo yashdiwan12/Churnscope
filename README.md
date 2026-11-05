@@ -4,7 +4,7 @@ Product analytics and churn-intelligence platform: turns user-activity events in
 
 ## What it does
 
-A signed-in user sees a Streamlit dashboard over product-event data, backed by a FastAPI API: **Overview** (active users, events, trends), **Funnel** (step conversion), **Retention** (cohort grid), **Engagement** (activity and feature use) and **Churn Risk** (customers ranked by predicted churn, sortable). **Upload data** lets a user import their own events CSV, map its event names, and see the same pages for their file only, with churn scored by a method trained on that file.
+A signed-in user sees a Streamlit dashboard over product-event data, backed by a FastAPI API: **Overview** (active users, events, trends), **Funnel** (step conversion), **Retention** (cohort grid), **Engagement** (activity and feature use) and **Churn Risk** (customers ranked by predicted churn, sortable). **Data & Uploads** lets a user import their own events CSV, map its event names, and see the same pages for their file only, with churn scored by a method trained on that file.
 
 Screenshots (demo data):
 

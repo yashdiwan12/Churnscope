@@ -203,3 +203,77 @@ def test_nul_in_any_used_field_skips_the_row_without_echo(caplog):
     assert list(parsed.rows["customer_id"]) == ["u4"]
     assert all(NUL not in str(v) for v in parsed.rows.to_numpy().ravel())
     assert NUL not in caplog.text
+
+
+# --- column mapping: the file's own headers matched to customer_id, event_name, event_timestamp ---
+
+OWN_HEAD = "User ID,Action,When\n"
+OWN_COLUMNS = {
+    "customer_id": "User ID",
+    "event_name": "Action",
+    "event_timestamp": "When",
+}
+
+
+def test_columns_map_a_file_with_its_own_headers():
+    raw = csv(f"u1,login,{OK_TS}", head=OWN_HEAD)
+    parsed = parse_csv(raw, NOW, OWN_COLUMNS)
+    assert list(parsed.rows["customer_id"]) == ["u1"]
+    assert list(parsed.rows["source_name"]) == ["login"]
+    assert parsed.total_rows == 1 and parsed.skipped == []
+
+
+def test_without_columns_the_same_file_is_still_missing_columns():
+    err = rejected(csv(f"u1,login,{OK_TS}", head=OWN_HEAD))
+    assert err.code == "missing_columns"
+
+
+def test_columns_match_headers_ignoring_case_and_spaces():
+    raw = csv(f"u1,login,{OK_TS}", head=OWN_HEAD)
+    mapped = {k: f"  {v.upper()} " for k, v in OWN_COLUMNS.items()}
+    assert len(parse_csv(raw, NOW, mapped).rows) == 1
+
+
+def test_columns_can_map_only_the_missing_ones_and_an_event_id():
+    raw = csv(f"u1,login,{OK_TS},e-1", head="customer_id,event_name,ts,eid\n")
+    parsed = parse_csv(raw, NOW, {"event_timestamp": "ts", "event_id": "eid"})
+    assert list(parsed.rows["event_id"]) == ["e-1"]
+
+
+def test_an_explicit_mapping_beats_a_column_that_already_has_the_name():
+    head = "customer_id,User ID,event_name,event_timestamp\n"
+    raw = csv(f"wrong,right,login,{OK_TS}", head=head)
+    parsed = parse_csv(raw, NOW, {"customer_id": "User ID"})
+    assert list(parsed.rows["customer_id"]) == ["right"]
+
+
+def test_columns_can_swap_two_names():
+    head = "customer_id,event_name,event_timestamp\n"
+    raw = csv(f"login,u1,{OK_TS}", head=head)
+    parsed = parse_csv(raw, NOW, {"customer_id": "event_name", "event_name": "customer_id"})
+    assert list(parsed.rows["customer_id"]) == ["u1"]
+    assert list(parsed.rows["source_name"]) == ["login"]
+
+
+@pytest.mark.parametrize(
+    "columns",
+    [
+        {**OWN_COLUMNS, "event_name": "Nope"},  # not a header in the file
+        {**OWN_COLUMNS, "event_name": "User ID"},  # one header used twice
+        {**OWN_COLUMNS, "bogus": "Action"},  # not a column we know
+        {**OWN_COLUMNS, "event_name": 5},  # not text
+        ["User ID"],  # not an object
+    ],
+)
+def test_bad_columns_are_refused_with_fixed_text(columns):
+    with pytest.raises(UploadRejected) as info:
+        parse_csv(csv(f"u1,login,{OK_TS}", head=OWN_HEAD), NOW, columns)
+    assert info.value.code == "bad_columns"
+    assert "Nope" not in info.value.message and "bogus" not in info.value.message
+
+
+def test_a_mapped_header_that_appears_twice_is_refused():
+    raw = csv(f"u1,u2,login,{OK_TS}", head="User ID,User ID,Action,When\n")
+    with pytest.raises(UploadRejected) as info:
+        parse_csv(raw, NOW, OWN_COLUMNS)
+    assert info.value.code == "missing_columns"

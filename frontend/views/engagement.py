@@ -50,7 +50,7 @@ def render(api: ApiClient, ctx: Context) -> None:
 
     figure = adoption_bars(result["feature_adoption"])
     if figure is not None:
-        st.plotly_chart(figure, width="stretch")
+        st.container(border=True).plotly_chart(figure, width="stretch")
     st.caption(
         "Feature adoption is the share of active users who used each feature, "
         f"not a share of events {n}."

@@ -13,12 +13,12 @@ PAGES = [
     (retention, "Retention", "retention"),
     (engagement, "Engagement", "engagement"),
     (churn, "Churn Risk", "churn-risk"),
-    (upload, "Upload data", "upload"),
+    (upload, "Data & Uploads", "upload"),
 ]
 
 st.set_page_config(page_title="Churnscope", layout="wide")
 st.markdown("<style>footer {visibility: hidden;}</style>", unsafe_allow_html=True)
-st.title("Churnscope")
+st.title(":material/insights: Churnscope")
 st.caption("Product analytics and churn intelligence")
 # Pages are built only after the gate returns, so none is reachable without a session.
 api, me = gate.require_session()

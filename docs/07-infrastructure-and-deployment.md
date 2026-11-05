@@ -48,6 +48,8 @@ flowchart LR
 | `APP_BASE_URL` | frontend | Dashboard origin used as the sign-in redirect |
 | `API_BASE_URL` | frontend | Deployed API URL |
 | `SUPABASE_ANON_KEY` | frontend | Public client key |
+| `API_WAKE_SECONDS` | frontend | Seconds to keep retrying a sleeping API (set about 45 on Render's free tier; default 0) |
+| `IDLE_TIMEOUT_MINUTES` | frontend | Idle sign-out (default 30; 0 turns it off) |
 
 Per-environment values live in each host's secret store, never in Git. Streamlit uses `secrets.toml` locally (git-ignored).
 

@@ -40,6 +40,7 @@ IMPORT_LOCK_KEY = 6_202_611
 INSERT_BATCH = 5_000
 
 REQUIRED_COLUMNS = ("customer_id", "event_name", "event_timestamp")
+MAPPABLE_COLUMNS = (*REQUIRED_COLUMNS, "event_id")
 MAX_FORM_FIELDS = 5
 MAX_FIELD_BYTES = 8_192  # non-file form fields (mapping JSON, flags)
 _CHUNK = 64 * 1024
@@ -85,7 +86,32 @@ def _timestamps(raw: pd.Series) -> tuple[pd.Series, pd.Series]:
     return parsed, has_zone
 
 
-def parse_csv(raw: bytes, now: pd.Timestamp) -> ParsedFile:
+def _wanted_columns(columns: object) -> dict[str, str]:
+    """Validate a `columns` mapping (our column -> the file's header) and normalise the headers."""
+    bad = UploadRejected("bad_columns", "The column matching is not valid.")
+    if not isinstance(columns, dict):
+        raise bad
+    wanted: dict[str, str] = {}
+    for target, source in columns.items():
+        if target not in MAPPABLE_COLUMNS or not isinstance(source, str):
+            raise bad
+        wanted[target] = source.strip().lower()
+    if len(set(wanted.values())) != len(wanted):  # one header cannot serve two columns
+        raise bad
+    return wanted
+
+
+def _apply_columns(df: pd.DataFrame, wanted: dict[str, str]) -> pd.DataFrame:
+    """Rename the file's headers to ours. A mapped header beats a column that already has the
+    name, and two names can be swapped, because the picked columns are copied before any drop."""
+    if any(source not in df.columns for source in wanted.values()):
+        raise UploadRejected("bad_columns", "The column matching is not valid.")
+    picked = pd.DataFrame({target: df[source] for target, source in wanted.items()})
+    rest = df.drop(columns=[c for c in {*wanted, *wanted.values()} if c in df.columns])
+    return pd.concat([rest, picked], axis=1)
+
+
+def parse_csv(raw: bytes, now: pd.Timestamp, columns: dict[str, str] | None = None) -> ParsedFile:
     if not raw.strip():
         raise UploadRejected("empty_file", "The file is empty.")
     try:
@@ -99,8 +125,9 @@ def parse_csv(raw: bytes, now: pd.Timestamp) -> ParsedFile:
         raise UploadRejected(
             "missing_columns", "The file is not a well-formed CSV with a header row."
         ) from None
+    wanted = _wanted_columns(columns) if columns is not None else {}
     names = [h.strip().lower() for h in header]
-    if any(names.count(c) > 1 for c in REQUIRED_COLUMNS + ("event_id",)):
+    if any(names.count(c) > 1 for c in (*MAPPABLE_COLUMNS, *wanted.values())):
         raise UploadRejected("missing_columns", "A column name appears more than once.")
     try:
         with warnings.catch_warnings():
@@ -127,6 +154,8 @@ def parse_csv(raw: bytes, now: pd.Timestamp) -> ParsedFile:
             "missing_columns", "The file is not a well-formed CSV with a header row."
         ) from None
     df.columns = [str(c).strip().lower() for c in df.columns]
+    if wanted:
+        df = _apply_columns(df, wanted)
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
     if missing:
         raise UploadRejected(
@@ -395,6 +424,22 @@ def _flag(fields: dict[str, str], name: str) -> bool:
     if value not in ("true", "false"):
         raise UploadRejected("bad_form", "Form flags must be true or false.")
     return value == "true"
+
+
+def column_options(fields: dict[str, str]) -> dict[str, str] | None:
+    """The optional `columns` form field (JSON: our column -> the file's header), or None.
+
+    Only the JSON shape is checked here; `parse_csv` checks it against the file's header."""
+    raw = fields.get("columns")
+    if raw is None or not raw.strip():
+        return None
+    try:
+        columns = json.loads(raw)
+    except ValueError:
+        raise UploadRejected("bad_columns", "The column matching must be JSON.") from None
+    if not isinstance(columns, dict):
+        raise UploadRejected("bad_columns", "The column matching must be an object.")
+    return columns
 
 
 def import_options(fields: dict[str, str]) -> tuple[dict, bool, bool]:

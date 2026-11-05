@@ -192,3 +192,39 @@ def test_scoped_422_does_not_cover_other_prefixes():
     assert all("input" in i for i in _validation_body("/datasets-foo"))
     for path in ("/datasets", "/datasets/check"):
         assert all(set(i) == {"loc", "msg"} for i in _validation_body(path))
+
+
+# --- column matching: a file whose headers are not ours ---
+
+OWN = "User ID,Action,When\nu1,login,2026-01-05T00:00:00Z\nu2,login,2026-01-06T00:00:00Z\n"
+OWN_COLUMNS = {"customer_id": "User ID", "event_name": "Action", "event_timestamp": "When"}
+
+
+def post_columns(client, body: str, columns):
+    return client.post(
+        "/datasets/check",
+        files={"file": ("e.csv", io.BytesIO(body.encode()), "text/csv")},
+        data={"columns": columns if isinstance(columns, str) else json.dumps(columns)},
+    )
+
+
+def test_check_with_columns_reads_a_file_with_its_own_headers(client, session):
+    before = counts(session)
+    assert post(client, OWN).json()["detail"]["code"] == "missing_columns"
+    r = post_columns(client, OWN, OWN_COLUMNS)
+    assert r.status_code == 200
+    body = r.json()
+    assert (body["total_rows"], body["valid_rows"], body["customers"]) == (2, 2, 2)
+    assert body["event_names"] == [{"name": "login", "count": 2}]
+    assert counts(session) == before
+
+
+@pytest.mark.parametrize(
+    "columns",
+    [{**OWN_COLUMNS, "event_name": "Nope"}, "not json", "[1]", "null"],
+)
+def test_check_with_bad_columns_is_a_422_with_fixed_text(client, columns):
+    r = post_columns(client, OWN, columns)
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "bad_columns"
+    assert "Nope" not in r.text

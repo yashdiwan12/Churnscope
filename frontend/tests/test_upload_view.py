@@ -1,4 +1,4 @@
-"""The Upload data page. The file widget is faked (AppTest cannot drive file_uploader)."""
+"""The Data & Uploads page. The file widget is faked (AppTest cannot drive file_uploader)."""
 
 import json
 import tomllib
@@ -505,7 +505,7 @@ def test_max_upload_size_config():
 
 def test_upload_page_is_registered():
     source = (Path(__file__).resolve().parent.parent / "app.py").read_text(encoding="utf-8")
-    assert '(upload, "Upload data", "upload")' in source
+    assert '(upload, "Data & Uploads", "upload")' in source
 
 
 NO_ROWS = CHECK_OK | {
@@ -538,3 +538,100 @@ def test_file_with_no_usable_rows_renders_message_and_disabled_import(monkeypatc
     assert "row 9: the customer ID is empty" in shown
     assert not any(s.label.startswith("Map ") for s in at.selectbox)
     assert button(at, "Import").disabled
+
+
+# --- column matching: a file whose headers are not customer_id, event_name, event_timestamp ---
+
+OWN_CSV = b"User ID,Action,Time\nc1,login,2026-10-01T00:00:00Z\n"
+OWN_COLUMNS = {"customer_id": "User ID", "event_name": "Action", "event_timestamp": "Time"}
+
+
+def column_boxes(at):
+    return {sb.label: sb for sb in at.selectbox if sb.label.startswith("Column for ")}
+
+
+def test_header_names_reads_the_first_row_only():
+    assert upload.header_names(b'\xef\xbb\xbfUser ID, Action ,"Time, UTC"\nx,y,z\n') == [
+        "User ID",
+        "Action",
+        "Time, UTC",
+    ]
+    assert upload.header_names(b"a,a,,b\n") == ["a", "b"]  # repeats and blanks dropped
+    assert upload.header_names(b"") == []
+    assert upload.header_names(b"\xff\xfe\x00bad") != []  # undecodable bytes never raise
+
+
+def test_a_file_with_our_headers_shows_no_column_matching(monkeypatch):
+    at, requested = checked(monkeypatch)
+    assert column_boxes(at) == {}
+    assert upload.COLUMNS_HELP not in texts(at)
+    assert "columns" not in posts(requested, "/datasets/check")[0]["data"]
+
+
+def test_own_headers_are_guessed_and_sent_with_the_check(monkeypatch):
+    routes = {"POST /datasets/check": (200, CHECK_OK)}
+    at, requested = page(monkeypatch, routes, file=("own.csv", OWN_CSV))
+    run(at)
+    assert upload.COLUMNS_HELP in texts(at)
+    boxes = column_boxes(at)
+    assert boxes["Column for customer_id"].value == "User ID"
+    assert boxes["Column for event_name"].value == "Action"
+    assert boxes["Column for event_timestamp"].value == "Time"
+    assert boxes["Column for event_id (optional)"].value == "None"
+    assert not button(at, "Check file").disabled
+    click(at, "Check file")
+    sent = posts(requested, "/datasets/check")[0]["data"]
+    assert json.loads(sent["columns"]) == OWN_COLUMNS
+
+
+def test_check_stays_off_until_every_required_column_is_chosen(monkeypatch):
+    at, _ = page(monkeypatch, {}, file=("odd.csv", b"alpha,beta,gamma\nx,y,z\n"))
+    run(at)
+    assert button(at, "Check file").disabled
+    assert "Choose a column for each" in texts(at)
+    for label, header in (
+        ("Column for customer_id", "alpha"),
+        ("Column for event_name", "beta"),
+        ("Column for event_timestamp", "gamma"),
+    ):
+        column_boxes(at)[label].select(header)
+        run(at)
+    assert not button(at, "Check file").disabled
+
+
+def test_one_column_cannot_serve_two_fields(monkeypatch):
+    at, _ = page(monkeypatch, {}, file=("own.csv", OWN_CSV))
+    run(at)
+    column_boxes(at)["Column for event_name"].select("User ID")
+    run(at)
+    assert button(at, "Check file").disabled
+    assert "Each column can be used only once" in texts(at)
+
+
+def test_changing_a_column_after_the_check_discards_it(monkeypatch):
+    routes = {"POST /datasets/check": (200, CHECK_OK)}
+    at, _ = page(monkeypatch, routes, file=("own.csv", OWN_CSV))
+    run(at)
+    click(at, "Check file")
+    assert "upload_check" in at.session_state
+    column_boxes(at)["Column for event_timestamp"].select("User ID")
+    run(at)
+    assert "upload_check" not in at.session_state
+
+
+def test_import_sends_the_matched_columns(monkeypatch):
+    routes = {
+        "POST /datasets/check": (200, CHECK_OK),
+        "POST /datasets": (201, IMPORT_OK),
+        "GET /datasets": lambda: (200, DATASETS_DEMO_ONLY[1]),
+    }
+    at, requested = page(monkeypatch, routes, file=("own.csv", OWN_CSV))
+    run(at)
+    click(at, "Check file")
+    click(at, "Import")
+    sent = posts(requested)[0]["data"]
+    assert json.loads(sent["columns"]) == OWN_COLUMNS
+
+
+def test_bad_columns_has_its_own_message():
+    assert upload.message_for("bad_columns") != upload.GENERIC_MESSAGE

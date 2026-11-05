@@ -174,11 +174,11 @@ sequenceDiagram
     participant API as FastAPI
     participant DB as PostgreSQL
     U->>UI: choose CSV, accept the privacy notice
-    UI->>API: POST /datasets/check (file)
+    UI->>API: POST /datasets/check (file, columns when the headers differ)
     API->>API: read within limits, parse, count rows, names and first-week share
     API-->>UI: event names with counts, suggested mapping, skipped rows, approximate-signup warning
-    U->>UI: adjust mapping, choose derive signup, tick the acknowledgement if warned
-    UI->>API: POST /datasets (file, mapping, flags)
+    U->>UI: match columns if asked, adjust mapping, choose derive signup, tick the acknowledgement if warned
+    UI->>API: POST /datasets (file, columns, mapping, flags)
     API->>API: validate mapping, derive signup and event ids, apply the 5 percent invalid rule
     API->>DB: BEGIN, take the global advisory lock
     API->>DB: global cap check over other users' uploaded events

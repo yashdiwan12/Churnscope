@@ -58,7 +58,7 @@ Public churn dataset: download per `data/README.md` into `data/raw/` (git-ignore
 
 ## 9.4a Uploads
 
-Uploads need nothing beyond `uv sync`: `python-multipart` (multipart parsing for `POST /datasets/check` and `POST /datasets`) is a dependency in `backend/pyproject.toml`, and migration `0003` runs with `alembic upgrade head`. The Streamlit uploader's 5 MB limit is `server.maxUploadSize = 5` in `frontend/.streamlit/config.toml`, read only when Streamlit is started from `frontend/`. Sign in, open **Upload data**, choose a CSV with `customer_id`, `event_name`, `event_timestamp` (and optionally `event_id`), map the event names, import, then pick **My data** in the sidebar. The page offers a template to download. Old uploads can be cleared with `scripts/purge_uploads.py` ([runbook](08-operations-runbook.md)).
+Uploads need nothing beyond `uv sync`: `python-multipart` (multipart parsing for `POST /datasets/check` and `POST /datasets`) is a dependency in `backend/pyproject.toml`, and migration `0003` runs with `alembic upgrade head`. The Streamlit uploader's 5 MB limit is `server.maxUploadSize = 5` in `frontend/.streamlit/config.toml`, read only when Streamlit is started from `frontend/`. Sign in, open **Data & Uploads**, choose a CSV with `customer_id`, `event_name`, `event_timestamp` (and optionally `event_id`), map the event names, import, then pick **My data** in the sidebar. The page offers a template to download. Old uploads can be cleared with `scripts/purge_uploads.py` ([runbook](08-operations-runbook.md)).
 
 ## 9.4b Train the churn model
 
