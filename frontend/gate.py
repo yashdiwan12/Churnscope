@@ -29,10 +29,32 @@ from states import NOT_ALLOWED, UNAVAILABLE
 
 FLOW_REUSE_SECONDS = 300  # well inside the verifier TTL of 10 minutes
 DEFAULT_IDLE_MINUTES = 30
+WAKE_RETRY_SECONDS = 3  # between tries while a sleeping host starts up
+WAKING = (
+    "Waking up the service. A free host sleeps when idle, so the first visit can take a minute."
+)
 SIGN_IN_STYLE = (
     "display:inline-block;padding:0.5rem 1rem;border-radius:0.5rem;background:#2563eb;"
     "color:#fff;text-decoration:none;font-weight:600"
 )
+
+
+def _pause(seconds: float) -> None:  # a name tests replace
+    time.sleep(seconds)
+
+
+def _now() -> float:  # a name tests replace
+    return time.monotonic()
+
+
+def wake_seconds_from_env() -> float:
+    """API_WAKE_SECONDS: how long to keep trying a sleeping API. Unset, malformed or negative is 0
+    (fail fast, right for a local API that is simply down); the deployment sets about 45."""
+    try:
+        seconds = float(os.getenv("API_WAKE_SECONDS", "").strip() or 0)
+    except ValueError:
+        return 0
+    return max(0, seconds)
 
 
 def idle_minutes_from_env() -> float:
@@ -52,6 +74,7 @@ class Config:
     supabase_anon_key: str
     app_base_url: str
     idle_timeout_seconds: float = DEFAULT_IDLE_MINUTES * 60  # 0 turns the idle sign-out off
+    api_wake_seconds: float = 0
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -61,6 +84,7 @@ class Config:
             supabase_anon_key=os.getenv("SUPABASE_ANON_KEY", ""),
             app_base_url=os.getenv("APP_BASE_URL", "http://localhost:8501"),
             idle_timeout_seconds=idle_minutes_from_env() * 60,
+            api_wake_seconds=wake_seconds_from_env(),
         )
 
 
@@ -187,6 +211,27 @@ def _blocked(config: Config, message: str) -> None:
     st.stop()
 
 
+def _get_me(api: ApiClient, config: Config) -> dict:
+    """`GET /me`, trying again for `api_wake_seconds` while the API answers unavailable (a free
+    host that was asleep). Any other failure, 401 and 403 included, is raised at once."""
+    deadline = _now() + config.api_wake_seconds
+    notice = None
+    try:
+        while True:
+            try:
+                return api.get("/me")
+            except ServiceUnavailable:
+                if _now() >= deadline:
+                    raise
+                if notice is None:
+                    notice = st.empty()
+                    notice.info(WAKING)
+                _pause(WAKE_RETRY_SECONDS)
+    finally:
+        if notice is not None:
+            notice.empty()
+
+
 def require_session() -> tuple[ApiClient, dict]:
     """The API client and the `/me` payload; never returns unless `/me` answered 200."""
     config = Config.from_env()
@@ -213,7 +258,7 @@ def require_session() -> tuple[ApiClient, dict]:
         config.api_base_url, lambda: st.session_state["tokens"].access_token, http_client()
     )
     try:
-        me = api.get("/me")  # on every rerun: a cache hit below must not outlive lost access
+        me = _get_me(api, config)  # on every rerun: a cache hit below must not outlive lost access
     except NotSignedIn:
         clear_session()
         st.rerun()
