@@ -168,14 +168,16 @@ def sign_in_page(config: Config) -> None:
         redirect_to=f"{config.app_base_url}?flow={flow}",
         challenge=challenge_for(verifier),
     )
-    # An anchor, not st.link_button: that always opens a new tab, but the OAuth redirect must
-    # come back to the tab that started the flow. _top, not _self: Streamlit Community Cloud shows
-    # the app inside an iframe, and Google refuses to render its sign-in page in a frame (403).
+    # An anchor that opens a new tab. Streamlit Community Cloud shows the app inside a sandboxed
+    # iframe: _self keeps Google's page inside the frame (Google answers 403), and _top is
+    # blocked by the sandbox (the click does nothing). A new tab works because the pending
+    # sign-in lives in the server-side VerifierStore, not in the tab that started it.
     st.markdown(
-        f'<a href="{html.escape(url, quote=True)}" target="_top" rel="noopener" '
+        f'<a href="{html.escape(url, quote=True)}" target="_blank" rel="noopener" '
         f'style="{SIGN_IN_STYLE}">Sign in with Google</a>',
         unsafe_allow_html=True,
     )
+    st.caption("Sign-in opens in a new tab.")
 
 
 def sign_out_button(config: Config) -> None:
