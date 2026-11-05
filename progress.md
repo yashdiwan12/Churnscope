@@ -2,6 +2,8 @@
 
 Live tracker of implementation progress per phase. Detailed notes, decisions, and evidence live in each phase's `docs/history/<phase>/history.md`; the phase summary table is in [docs/10-project-history.md](docs/10-project-history.md).
 
+**Specs and plans:** `PLAN.md` and everything under `docs/superpowers/` (the design specs and implementation plans linked below) are local working notes. They are git-ignored since 2026-11-06, so those links open only on the author's machine, not on GitHub. The finished record of each phase is in `docs/history/` and docs 01-10.
+
 **Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-11-06 · Phase 7a and the pre-deploy polish are merged into `main` (not yet pushed): backend 436 (2 opt-in timing tests skipped) and frontend 226 tests pass locally at the last full run
 
 ## Summary
