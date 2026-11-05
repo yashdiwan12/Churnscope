@@ -169,9 +169,10 @@ def sign_in_page(config: Config) -> None:
         challenge=challenge_for(verifier),
     )
     # An anchor, not st.link_button: that always opens a new tab, but the OAuth redirect must
-    # come back to the tab that started the flow.
+    # come back to the tab that started the flow. _top, not _self: Streamlit Community Cloud shows
+    # the app inside an iframe, and Google refuses to render its sign-in page in a frame (403).
     st.markdown(
-        f'<a href="{html.escape(url, quote=True)}" target="_self" rel="noopener" '
+        f'<a href="{html.escape(url, quote=True)}" target="_top" rel="noopener" '
         f'style="{SIGN_IN_STYLE}">Sign in with Google</a>',
         unsafe_allow_html=True,
     )

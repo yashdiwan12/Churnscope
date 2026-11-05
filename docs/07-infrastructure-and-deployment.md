@@ -7,7 +7,7 @@
 | Component | Host | Notes |
 |---|---|---|
 | PostgreSQL + Auth | **Supabase** (managed) | Use the connection pooler string for the API |
-| FastAPI backend | **Render** web service (free tier cold-starts; frontend must handle first-request latency) | Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT` from `backend/` |
+| FastAPI backend | **Render** web service (free tier cold-starts; frontend must handle first-request latency) | Root directory `backend/`. Build: `pip install uv && uv sync --frozen --no-dev`. Start: `uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port $PORT` (a bare `uvicorn` is not found: the packages live in `backend/.venv`, which is not on the host's PATH) |
 | Streamlit frontend | **Streamlit Community Cloud** | Entry: `frontend/app.py` |
 | Source | GitHub | CI via GitHub Actions |
 
