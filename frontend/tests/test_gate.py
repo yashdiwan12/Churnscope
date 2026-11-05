@@ -44,7 +44,8 @@ def test_signed_out_user_gets_a_google_link_with_pkce(monkeypatch):
     anchors = sign_in_anchors(at)
     assert len(anchors) == 1
     attrs, link = anchors[0]
-    assert 'target="_top"' in attrs  # the whole window, not a hosting iframe; returns to this tab
+    assert 'target="_blank"' in attrs  # a new tab: _self/_top fail inside Streamlit Cloud's iframe
+    assert 'rel="noopener"' in attrs
     assert link.startswith("https://p.supabase.co/auth/v1/authorize?")
     assert "code_challenge=" in link and "flow%3D" in link
 
