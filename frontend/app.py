@@ -13,7 +13,7 @@ PAGES = [
     (retention, "Retention", "retention"),
     (engagement, "Engagement", "engagement"),
     (churn, "Churn Risk", "churn-risk"),
-    (upload, "Upload data", "upload"),
+    (upload, "Data & Uploads", "upload"),
 ]
 
 st.set_page_config(page_title="Churnscope", layout="wide")

@@ -224,7 +224,7 @@ flowchart LR
         re["Retention"]
         en["Engagement"]
         ch["Churn Risk"]
-        up["Upload data"]
+        up["Data & Uploads"]
     end
     pages --> da["data.py<br/>5 min cache"]
     da --> cl["api_client.py<br/>token header, timeouts, error mapping"]

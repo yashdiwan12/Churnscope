@@ -1,4 +1,4 @@
-"""The Upload data page. The file widget is faked (AppTest cannot drive file_uploader)."""
+"""The Data & Uploads page. The file widget is faked (AppTest cannot drive file_uploader)."""
 
 import json
 import tomllib
@@ -505,7 +505,7 @@ def test_max_upload_size_config():
 
 def test_upload_page_is_registered():
     source = (Path(__file__).resolve().parent.parent / "app.py").read_text(encoding="utf-8")
-    assert '(upload, "Upload data", "upload")' in source
+    assert '(upload, "Data & Uploads", "upload")' in source
 
 
 NO_ROWS = CHECK_OK | {

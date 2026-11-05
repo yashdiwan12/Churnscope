@@ -1,4 +1,4 @@
-"""Upload data: check a CSV, map its event names to ours, import it, or delete it.
+"""Data & Uploads: check a CSV, map its event names to ours, import it, or delete it.
 
 The file widget is read through `current_upload` alone, so tests can replace it. Every message
 for a rejected file is fixed text chosen by the error's code; server text is never shown.
@@ -323,7 +323,7 @@ def _delete_section(api: ApiClient, ctx: Context) -> None:
 
 
 def render(api: ApiClient, ctx: Context) -> None:
-    st.header("Upload data")
+    st.header("Data & Uploads")
     st.info(NOTICE)
     if notice := st.session_state.pop("upload_notice", None):
         st.success(notice)
