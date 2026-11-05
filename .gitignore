@@ -11,3 +11,8 @@ data/raw/
 data/processed/
 .streamlit/secrets.toml
 .ruff_cache/
+
+# Ideation and working notes, kept locally but not part of the published project
+PLAN.md
+docs/superpowers/
+.superpowers/
