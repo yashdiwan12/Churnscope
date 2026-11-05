@@ -1,10 +1,13 @@
-"""Data & Uploads: check a CSV, map its event names to ours, import it, or delete it.
+"""Data & Uploads: check a CSV, match its columns and event names to ours, import it, or delete it.
 
 The file widget is read through `current_upload` alone, so tests can replace it. Every message
 for a rejected file is fixed text chosen by the error's code; server text is never shown.
 """
 
+import csv
+import io
 import json
+import zlib
 from datetime import datetime
 
 import streamlit as st
@@ -41,6 +44,28 @@ TEMPLATE_CSV = (
     "cust-002,signup,2026-01-07T14:15:00Z,evt-0003\n"
 )
 
+CHOOSE = "Choose a column"
+NO_COLUMN = "None"
+MAX_HEADERS = 200
+# (our column, label, required, header names that usually mean it), compared in lower case with
+# spaces and hyphens read as underscores
+COLUMN_FIELDS = (
+    ("customer_id", "customer_id", True, ("customer", "user_id", "userid", "user", "account_id")),
+    ("event_name", "event_name", True, ("event", "event_type", "action", "activity", "name")),
+    (
+        "event_timestamp",
+        "event_timestamp",
+        True,
+        ("timestamp", "time", "date", "datetime", "created_at", "occurred_at", "event_time", "ts"),
+    ),
+    ("event_id", "event_id (optional)", False, ("event_uuid", "eventid", "uuid")),
+)
+COLUMNS_HELP = (
+    "Your file's column names differ from ours. Say which of your columns holds each one."
+)
+COLUMNS_INCOMPLETE = "Choose a column for each required field to check the file."
+COLUMNS_REPEATED = "Each column can be used only once."
+
 GENERIC_MESSAGE = "The upload was not accepted. Please check the file and try again."
 MESSAGES = {
     "empty_file": "The file is empty.",
@@ -57,6 +82,7 @@ MESSAGES = {
         "activity event."
     ),
     "bad_mapping": "That event mapping is not valid. Check it and try again.",
+    "bad_columns": "That column matching is not valid. Check it and try again.",
     "derive_not_allowed": "First-event signup cannot be used when an event is mapped to signup.",
     "acknowledgement_required": "Tick the box confirming that signup dates are approximate.",
     "bad_form": "The upload request was not understood. Please try again.",
@@ -91,6 +117,68 @@ def current_upload() -> tuple[str, bytes] | None:
     """The file chosen in the widget as (name, bytes), or None."""
     chosen = st.file_uploader("CSV file", type=["csv"])
     return None if chosen is None else (chosen.name, chosen.getvalue())
+
+
+def header_names(data: bytes) -> list[str]:
+    """The file's header cells, trimmed, without blanks or repeats. Never raises: a file we
+    cannot read here is left for the server to refuse with its own message."""
+    first = data[:20_000].split(b"\n", 1)[0]
+    try:
+        row = next(csv.reader(io.StringIO(first.decode("utf-8-sig", errors="replace"))), [])
+    except csv.Error:
+        return []
+    names: list[str] = []
+    for cell in row:
+        cell = cell.strip()
+        if cell and cell not in names:
+            names.append(cell)
+    return names[:MAX_HEADERS]
+
+
+def _simple(name: str) -> str:
+    return name.strip().lower().replace(" ", "_").replace("-", "_")
+
+
+def _default_header(target: str, guesses: tuple[str, ...], headers: list[str]) -> str | None:
+    for wanted in (target, *guesses):
+        for header in headers:
+            if _simple(header) == wanted:
+                return header
+    return None
+
+
+def _columns_form(data: bytes) -> tuple[dict[str, str] | None, bool]:
+    """Let the user say which of their columns is ours. Returns (columns to send, ready).
+
+    Nothing is shown, and None returned, when the file already has the three required names."""
+    headers = header_names(data)
+    present = {h.strip().lower() for h in headers}
+    if not headers or all(target in present for target, *_ in COLUMN_FIELDS[:3]):
+        return None, True
+    st.subheader("Match your columns")
+    st.caption(COLUMNS_HELP)
+    stamp = zlib.crc32("|".join(headers).encode())  # new file or headers, fresh widgets
+    columns: dict[str, str] = {}
+    for target, label, required, guesses in COLUMN_FIELDS:
+        options = [CHOOSE if required else NO_COLUMN, *headers]
+        default = (
+            _default_header(target, guesses, headers) if required or target in present else None
+        )
+        choice = st.selectbox(
+            f"Column for {label}",
+            options,
+            index=options.index(default) if default in options else 0,
+            key=f"upload_col_{stamp}_{target}",
+        )
+        if choice not in (CHOOSE, NO_COLUMN):
+            columns[target] = choice
+    if len(set(columns.values())) != len(columns):
+        st.warning(COLUMNS_REPEATED)
+        return None, False
+    if not all(target in columns for target, *_ in COLUMN_FIELDS[:3]):
+        st.caption(COLUMNS_INCOMPLETE)
+        return None, False
+    return columns, True
 
 
 def _join(items: list[str]) -> str:
@@ -170,9 +258,10 @@ def _show_summary(summary: dict) -> None:
         st.caption(_skip_line(skip))
 
 
-def _check(api: ApiClient, name: str, data: bytes) -> None:
+def _check(api: ApiClient, name: str, data: bytes, columns: dict[str, str] | None) -> None:
+    form = {"columns": json.dumps(columns)} if columns else {}
     try:
-        result = api.post_file("/datasets/check", file=(name, data, "text/csv"), data={})
+        result = api.post_file("/datasets/check", file=(name, data, "text/csv"), data=form)
     except ApiError as exc:
         st.error(message_for(exc.code))
         return
@@ -184,6 +273,7 @@ def _check(api: ApiClient, name: str, data: bytes) -> None:
     st.session_state["upload_check"] = {
         "name": name,
         "data": data,
+        "columns": columns,
         "result": result,
         "n": previous + 1,
     }
@@ -286,15 +376,14 @@ def _checked_section(api: ApiClient, ctx: Context, state: dict) -> None:
     )
 
     def pending() -> dict:  # built from the current bytes, mapping and ticks on every click
-        return {
-            "name": state["name"],
-            "data": state["data"],
-            "form": {
-                "mapping": json.dumps(mapping),
-                "derive_signup": "true" if derive else "false",
-                "acknowledge_approximate_signup": "true" if acknowledged else "false",
-            },
+        form = {
+            "mapping": json.dumps(mapping),
+            "derive_signup": "true" if derive else "false",
+            "acknowledge_approximate_signup": "true" if acknowledged else "false",
         }
+        if state.get("columns"):
+            form["columns"] = json.dumps(state["columns"])
+        return {"name": state["name"], "data": state["data"], "form": form}
 
     if st.button("Import", disabled=not ready):
         st.session_state["upload_pending"] = pending()
@@ -335,13 +424,18 @@ def render(api: ApiClient, ctx: Context) -> None:
     )
     chosen = current_upload()
     state = st.session_state.get("upload_check")
-    if state and (chosen is None or chosen != (state["name"], state["data"])):
-        _reset_check()  # a different file, or none: the old result no longer applies
-        state = None
     if chosen is not None:
         st.markdown(f"File: {escape_markdown(chosen[0])}")
-    if st.button("Check file", disabled=chosen is None):
-        _check(api, *chosen)
+    columns, columns_ready = (None, True) if chosen is None else _columns_form(chosen[1])
+    if state and (
+        chosen is None
+        or chosen != (state["name"], state["data"])
+        or columns != state.get("columns")
+    ):
+        _reset_check()  # a different file or column choice, or none: the old result is stale
+        state = None
+    if st.button("Check file", disabled=chosen is None or not columns_ready):
+        _check(api, *chosen, columns)
         state = st.session_state.get("upload_check")
     if state:
         _checked_section(api, ctx, state)

@@ -104,8 +104,11 @@ async def check_upload(request: Request, user: User) -> CheckOut:
     # The body is read by hand (not a declared File parameter) so the size limits are enforced
     # before FastAPI would buffer the upload.
     try:
-        _, raw = await uploads.read_upload(request)
-        parsed = await run_in_threadpool(uploads.parse_csv, raw, pd.Timestamp.now(tz="UTC"))
+        form = await uploads.read_form(request)
+        columns = uploads.column_options(form.fields)
+        parsed = await run_in_threadpool(
+            uploads.parse_csv, form.data, pd.Timestamp.now(tz="UTC"), columns
+        )
     except uploads.UploadRejected as err:
         raise rejection(err) from None
     return summarise(parsed)
@@ -113,7 +116,8 @@ async def check_upload(request: Request, user: User) -> CheckOut:
 
 def _parse_and_prepare(form: uploads.UploadForm) -> uploads.Prepared:
     mapping, derive, acknowledged = uploads.import_options(form.fields)
-    parsed = uploads.parse_csv(form.data, pd.Timestamp.now(tz="UTC"))
+    columns = uploads.column_options(form.fields)
+    parsed = uploads.parse_csv(form.data, pd.Timestamp.now(tz="UTC"), columns)
     return uploads.prepare(parsed, mapping, derive, acknowledged)
 
 
@@ -177,7 +181,8 @@ def _store_upload(
 async def import_upload(request: Request, user: User, session: SessionDep) -> ImportOut:
     """Import a CSV as the caller's upload, replacing the previous one in one transaction.
 
-    Multipart fields: `file`, `mapping` (JSON object), `derive_signup` and
+    Multipart fields: `file`, `mapping` (JSON object), optional `columns` (JSON object: our column
+    to the file's header), `derive_signup` and
     `acknowledge_approximate_signup` ("true" or "false", default false).
     """
     try:

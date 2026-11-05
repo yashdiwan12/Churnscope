@@ -433,3 +433,27 @@ def test_body_is_read_before_any_db_access(session, users, monkeypatch):
 def test_dot_names_become_the_default_filename():
     for name in ("..", ".", "a/..", "C:\\x\\.."):
         assert clean_filename(name) == DEFAULT_FILENAME
+
+
+def test_import_with_columns_reads_a_file_with_its_own_headers(session, users):
+    c = client_for(session, users[0])
+    body = "User ID,Action,When\n" + "".join(
+        f"u{i},{name},2026-03-0{d}T00:00:00Z\n"
+        for i in range(3)
+        for name, d in (("join", 1), ("login", 2), ("login", 3))
+    )
+    columns = {"customer_id": "User ID", "event_name": "Action", "event_timestamp": "When"}
+    r = c.post(
+        "/datasets",
+        files={"file": ("own.csv", io.BytesIO(body.encode()), "text/csv")},
+        data={"mapping": json.dumps(MAP), "columns": json.dumps(columns)},
+    )
+    assert r.status_code == 201
+    assert (r.json()["dataset"]["customer_count"], r.json()["imported_events"]) == (3, 9)
+
+    bad = c.post(
+        "/datasets",
+        files={"file": ("own.csv", io.BytesIO(body.encode()), "text/csv")},
+        data={"mapping": json.dumps(MAP), "columns": json.dumps({"customer_id": "Nope"})},
+    )
+    assert bad.status_code == 422 and bad.json()["detail"]["code"] == "bad_columns"
