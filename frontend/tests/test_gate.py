@@ -2,6 +2,7 @@
 
 import html
 import re
+import time
 
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -135,3 +136,54 @@ def test_me_other_4xx_shows_the_unavailable_message_not_a_traceback(monkeypatch)
     assert "Active users" not in shown and "Window:" not in shown
     assert "404" not in shown and "no such route" not in shown
     assert requested == ["/me"]
+
+
+# --- idle sign-out: a session untouched for IDLE_TIMEOUT_MINUTES ends on the next interaction ---
+
+LOGOUT = "/auth/v1/logout"
+
+
+def idle_app(monkeypatch, idle_seconds, **env):
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    routes = {"/me": (200, ME_OK), "/analytics/overview": (200, OVERVIEW_OK), LOGOUT: (204, None)}
+    at, requested = signed_in_app(monkeypatch, routes)
+    at.session_state["last_seen"] = time.time() - idle_seconds
+    return at, requested
+
+
+def test_session_idle_past_the_limit_is_signed_out_with_a_notice(monkeypatch):
+    at, requested = idle_app(monkeypatch, idle_seconds=31 * 60)
+    run(at)
+    assert "tokens" not in at.session_state
+    assert len(sign_in_anchors(at)) == 1
+    assert "signed out after 30 minutes of inactivity" in texts(at)
+    assert "Active users" not in texts(at)
+    assert "/me" not in requested  # the API is never asked once the session has expired
+    assert LOGOUT in requested  # the refresh token is revoked on the server too
+
+
+def test_session_within_the_limit_stays_signed_in_and_stamps_activity(monkeypatch):
+    at, _ = idle_app(monkeypatch, idle_seconds=10 * 60)
+    before = time.time()
+    run(at)
+    assert "tokens" in at.session_state
+    assert "inactivity" not in texts(at)
+    assert at.session_state["last_seen"] >= before
+
+
+def test_idle_limit_is_configurable_and_zero_turns_it_off(monkeypatch):
+    at, _ = idle_app(monkeypatch, idle_seconds=2 * 60, IDLE_TIMEOUT_MINUTES="1")
+    run(at)
+    assert "tokens" not in at.session_state
+    assert "after 1 minute of inactivity" in texts(at)
+
+    at, _ = idle_app(monkeypatch, idle_seconds=99 * 3600, IDLE_TIMEOUT_MINUTES="0")
+    run(at)
+    assert "tokens" in at.session_state
+
+
+def test_a_bad_idle_setting_falls_back_to_the_default(monkeypatch):
+    at, _ = idle_app(monkeypatch, idle_seconds=31 * 60, IDLE_TIMEOUT_MINUTES="soon")
+    run(at)
+    assert "tokens" not in at.session_state

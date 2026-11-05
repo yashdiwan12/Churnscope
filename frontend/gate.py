@@ -28,10 +28,21 @@ from auth import (
 from states import NOT_ALLOWED, UNAVAILABLE
 
 FLOW_REUSE_SECONDS = 300  # well inside the verifier TTL of 10 minutes
+DEFAULT_IDLE_MINUTES = 30
 SIGN_IN_STYLE = (
     "display:inline-block;padding:0.5rem 1rem;border-radius:0.5rem;background:#2563eb;"
     "color:#fff;text-decoration:none;font-weight:600"
 )
+
+
+def idle_minutes_from_env() -> float:
+    """IDLE_TIMEOUT_MINUTES; unset, malformed or negative falls back to the default, 0 disables."""
+    raw = os.getenv("IDLE_TIMEOUT_MINUTES", "").strip()
+    try:
+        minutes = float(raw) if raw else DEFAULT_IDLE_MINUTES
+    except ValueError:
+        return DEFAULT_IDLE_MINUTES
+    return minutes if minutes >= 0 else DEFAULT_IDLE_MINUTES
 
 
 @dataclass(frozen=True)
@@ -40,6 +51,7 @@ class Config:
     supabase_url: str
     supabase_anon_key: str
     app_base_url: str
+    idle_timeout_seconds: float = DEFAULT_IDLE_MINUTES * 60  # 0 turns the idle sign-out off
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -48,6 +60,7 @@ class Config:
             supabase_url=os.getenv("SUPABASE_URL", ""),
             supabase_anon_key=os.getenv("SUPABASE_ANON_KEY", ""),
             app_base_url=os.getenv("APP_BASE_URL", "http://localhost:8501"),
+            idle_timeout_seconds=idle_minutes_from_env() * 60,
         )
 
 
@@ -64,6 +77,36 @@ def http_client() -> httpx.Client:
 
 def clear_session() -> None:
     st.session_state.pop("tokens", None)
+    st.session_state.pop("last_seen", None)
+
+
+def _minutes_text(seconds: float) -> str:
+    minutes = round(seconds / 60)
+    return f"{minutes} minute" + ("" if minutes == 1 else "s")
+
+
+def _end_idle_session(config: Config) -> None:
+    """Revoke the refresh token on the server (best effort) and drop the local session."""
+    sign_out(
+        http_client(),
+        supabase_url=config.supabase_url,
+        anon_key=config.supabase_anon_key,
+        access_token=st.session_state["tokens"].access_token,
+    )
+    clear_session()
+    st.session_state["idle_notice"] = _minutes_text(config.idle_timeout_seconds)
+
+
+def _check_idle(config: Config) -> None:
+    """Sign out a session untouched for the idle limit. Only a rerun can notice, so an open but
+    untouched tab stays on screen until its next click; that click lands on the sign-in page."""
+    now = time.time()
+    last_seen = st.session_state.get("last_seen")
+    limit = config.idle_timeout_seconds
+    if limit and last_seen is not None and now - last_seen > limit:
+        _end_idle_session(config)
+        return
+    st.session_state["last_seen"] = now
 
 
 def finish_sign_in(config: Config, code: str, flow: str) -> None:
@@ -85,6 +128,9 @@ def finish_sign_in(config: Config, code: str, flow: str) -> None:
 
 
 def sign_in_page(config: Config) -> None:
+    idle = st.session_state.pop("idle_notice", None)
+    if idle:
+        st.info(f"You were signed out after {idle} of inactivity. Please sign in again.")
     st.write("Sign in to view analytics and churn risk.")
     # One pending sign-in per browser session (not one per rerun), so reruns cannot flood the store.
     pending = st.session_state.get("pending_flow")
@@ -154,6 +200,9 @@ def require_session() -> tuple[ApiClient, dict]:
         st.error("Sign-in was cancelled or failed. Please try again.")
     elif "code" in params and "flow" in params and "tokens" not in st.session_state:
         finish_sign_in(config, params["code"], params["flow"])
+
+    if "tokens" in st.session_state:
+        _check_idle(config)
 
     if "tokens" not in st.session_state:
         sign_in_page(config)
