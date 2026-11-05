@@ -2,7 +2,7 @@
 
 Live tracker of implementation progress per phase. Detailed notes, decisions, and evidence live in each phase's `docs/history/<phase>/history.md`; the phase summary table is in [docs/10-project-history.md](docs/10-project-history.md).
 
-**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-11-03 · Phase 7a merged into `main`: backend 418 (2 opt-in timing tests skipped) and frontend 203 tests pass locally at the last full run
+**Legend:** ✅ done · 🟡 in progress · ⬜ not started · Updated: 2026-11-06 · Phase 7a and the pre-deploy polish are merged into `main` (not yet pushed): backend 436 (2 opt-in timing tests skipped) and frontend 226 tests pass locally at the last full run
 
 ## Summary
 
@@ -117,7 +117,8 @@ Split in two (decided 2026-11-02): **7a** quality, security and docs, local only
 - [x] Secrets/logging/data-exposure review (doc 06 section 6.6: no secrets in history, logs and errors checked, pip-audit clean, CORS default empty)
 - [ ] Deploy after local workflow is reliable (Phase 7b)
 - Done in 7a (not counted): deferred minors from Phases 5, 6 and 6b triaged; cheap ones fixed (no-signup uploads, transient database errors, duplicate headers, 422 scope, selection after a failed list, preview history and others), the rest listed with reasons in doc 08 section 8.6 Known limitations.
-- For 7b (not counted): add the deployed app URL to Supabase's redirect list and the Google client origins; keep the Google consent screen in Testing with named test users (decided); set `CORS_ORIGINS` only if a browser calls the API; optional open-access setting (`ALLOW_ANY_GOOGLE_USER`) and GitHub sign-in; move `ALLOWED_EMAILS` and keys into the host's secret store; verify the `app.py` page registration on the real app (AppTest cannot navigate callable pages); apply migration `0003` to the Supabase project (`alembic upgrade head`, with the user's approval) before the deployed app uses uploads.
+- Done after 7a, before 7b (not counted; merged into `main` 2026-11-06): OS-following light and dark theme with shared chart colours; the Upload page renamed **Data & Uploads**; idle sign-out (`IDLE_TIMEOUT_MINUTES`, default 30); a wait for a sleeping API on first load (`API_WAKE_SECONDS`, off by default, set about 45 in the deployment); column matching for CSVs whose headers are not ours (`columns` form field on check and import); `PLAN.md` and `docs/superpowers/` no longer tracked. Column matching was tried by hand on `data/processed/trial/4_own_column_names.csv`. The wake-up wait is untested against a real Render service.
+- For 7b (not counted): set `API_WAKE_SECONDS` on the deployed frontend and confirm a real cold start fits it; add the deployed app URL to Supabase's redirect list and the Google client origins; keep the Google consent screen in Testing with named test users (decided); set `CORS_ORIGINS` only if a browser calls the API; optional open-access setting (`ALLOW_ANY_GOOGLE_USER`) and GitHub sign-in; move `ALLOWED_EMAILS` and keys into the host's secret store; verify the `app.py` page registration on the real app (AppTest cannot navigate callable pages); apply migration `0003` to the Supabase project (`alembic upgrade head`, with the user's approval) before the deployed app uses uploads.
 
 ## How to maintain this file
 When a task lands: tick its box, update the phase's `Done / Total` in the summary, and add the details to that phase's `history.md`.

@@ -37,6 +37,15 @@ Phase 7 is split: **7a** quality, security and docs (local only) and **7b** depl
 - A replace during the import's own scoring step still answers 201 (the import is committed); only `POST /datasets/{id}/score` answers 404.
 - Screenshot file names follow what was captured (`sign-in.png`, `churn-risk.png`, plus `engagement.png`).
 
+## Pre-deploy polish (2026-11-04 to 2026-11-06, merged into `main` locally)
+- Theme: `[theme.light]` and `[theme.dark]` in `frontend/.streamlit/config.toml` with no `base`, so the OS picks the mode; chart colours shared in `frontend/theme.py` (blue series, red at-risk, blue ramp for the heatmap), checked with the colour-blindness validator on the light, dark and card surfaces. The lightest heatmap step is low contrast on purpose: it means near zero.
+- Page renamed **Data & Uploads** (URL stays `/upload`).
+- Idle sign-out: a rerun checks `last_seen`; past `IDLE_TIMEOUT_MINUTES` (default 30, 0 = off) the refresh token is revoked and the user lands on sign-in with a notice. An untouched open tab cannot notice until its next click.
+- Cold start: `GET /me` is retried every 3 s for `API_WAKE_SECONDS` while the API answers unavailable, with a waking-up notice. Off by default so a down local API fails fast.
+- Column matching: optional `columns` form field on `/datasets/check` and `/datasets`; the page reads the header row and shows dropdowns when a required name is missing. A mapped header beats a column already named the same; unknown or repeated headers are refused with `bad_columns`.
+- `PLAN.md` and `docs/superpowers/` untracked and git-ignored (local ideation notes); links to them from the docs are left as they are, by decision.
+- Backend 436 passed, 2 skipped; frontend 226 passed.
+
 ## Results
 - Backend: 418 passed, 2 skipped (opt-in timing checks); frontend: 203 passed; ruff clean. All against local Docker Postgres; Supabase was not touched.
 
