@@ -91,7 +91,7 @@ Users can upload their own events. The file may hold real customer identifiers, 
 - [x] Missing / invalid / expired / wrong-user token tests pass (`test_security.py`, `test_authorization.py`, `test_me_api.py`)
 - [x] Client-supplied identity cannot override verified identity (`user_id` in a body is a 422; owner comes from the token)
 - [x] Logs contain no tokens or unnecessary personal data (all 10 `logger.` calls in `backend/app` log exception type names or fixed text; section 6.6)
-- [ ] CORS lists only required origins (the code default is now empty and tested in `test_health.py`; the deployed value is set with the dashboard URL in Phase 7b, so the box closes there)
+- [x] CORS lists only required origins (the code default is empty and tested in `test_health.py`; the deployed value is empty too, because the dashboard calls the API from Streamlit's server and no browser calls it)
 - [x] RLS enabled on exposed tables and tested (`tests/test_rls.py`; checked on the Supabase project)
 - [x] Error responses expose no internals (all 28 `HTTPException` sites and both `JSONResponse` handlers return fixed text or field paths; section 6.6)
 - [x] Dependencies reviewed (`pip-audit` on both locked environments, 2026-11-03: no known vulnerabilities; section 6.6)
@@ -111,3 +111,11 @@ Run on 2026-11-03 on branch `phase-7a-quality`, local only (no Supabase connecti
 | Code review | Two passes. (1) `security-review` skill run on 2026-11-03 over the branch diff (`git diff main...HEAD` at ab56b44): **no findings** at or above confidence 8/10, so nothing went to false-positive filtering. Risks it checked and found not exploitable: upload routes moved to `current_user` + `ensure_profile` (same token, allow-list and Google checks; owner comes only from the token); `score_dataset`/`set_scoring` ownership unchanged (new paths only turn a race into a 404); `clean_filename` is a display label, never a path; the raw CSV header check gives a fixed message with no echo; the narrowed 422 path match still covers every real `/datasets` route; the empty CORS default tightens access; purge prints the exception type only; no-signup and transient-error handling log type names only; frontend `dataset_choice` is server-side session state and the API still checks ownership; the churn message order and preview timestamp changes are display-only, with no `unsafe_allow_html`. (2) Hand review over `git diff main...HEAD` plus a pass over `backend/app` and `frontend`: every route's dependency (analytics and churn: `current_user`; events: `ingest_key`; me and datasets: user or profile; health open by design), raw SQL (one `pg_advisory_xact_lock` with a bound parameter, no string-built SQL), `eval`/`pickle`/`subprocess` use (the model artifact is the only unpickle and is hash-checked), and the Task 2-3 changes (no-signup path, transient 503, body-before-profile) | No further findings. |
 
 Outcome: one finding (CORS default), fixed with tests. Remaining open box: CORS in 6.5 until Phase 7b sets the deployed origin. Tests after the pass: backend 418 passed (2 opt-in timing tests skipped), frontend 203 passed with `-W error`; ruff clean in both.
+
+## 6.7 Deployed setup (Phase 7b) `[Built]`
+
+- Two gates, both required: Google's consent screen in Testing mode admits only the named test users, and the API admits only `ALLOWED_EMAILS` (an empty list admits nobody). Adding a person means adding them to both.
+- Secrets live only in the Render environment and the Streamlit secrets. The Supabase anon key is public by design; the service-role key and the database password are not on the dashboard host. `INGEST_API_KEY` is unset on Render, so `POST /events` is closed.
+- The API verifies tokens against Supabase's public keys (JWKS), so no JWT secret is stored anywhere.
+- Supabase's redirect list names the dashboard address and localhost only; a return address that is not listed falls back to the Site URL, never to an arbitrary host.
+- The Google sign-in link opens in a new tab (`rel="noopener"`), because the hosting iframe blocks same-window navigation (doc 07, section 7.7).

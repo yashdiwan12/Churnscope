@@ -50,5 +50,14 @@ Phase 7 is split: **7a** quality, security and docs (local only) and **7b** depl
 - Backend: 418 passed, 2 skipped (opt-in timing checks); frontend: 203 passed; ruff clean. All against local Docker Postgres; Supabase was not touched.
 
 ## Open
-- Phase 7b deploy: the items are listed at the end of the Phase 7 section in `progress.md`.
+- Phase 7b: deployed; what is left is the live check list (doc 07 section 7.8). See the 7b section below.
 - Accepted minors: doc 08 section 8.6.
+
+## Phase 7b - Deploy (2026-11-06)
+- API on Render (`churnscope-api`, free tier), dashboard on Streamlit Community Cloud (`churnscope-analytics`), both from `main` of the public repo; database and Google sign-in on the existing Supabase project. The full setup and the values are in doc 07 section 7.7.
+- Render start command: a bare `uvicorn` failed with `command not found` (status 127) because the packages are in `backend/.venv`; fixed with `uv run --no-sync uvicorn ...`. The server needed about 23 s to start, so the dashboard's wait is set to 60 s.
+- Sign-in on Streamlit Cloud took three tries. The app runs in a sandboxed iframe: a `_self` link kept Google's page inside the frame (Google answered 403), a `_top` link was blocked by the sandbox (the click did nothing), and `_blank` (a new tab) works. A web search confirmed the sandbox does not allow top navigation and the platform gives no way to change it. Same-window sign-in would need the dashboard hosted outside an iframe or `st.login`; neither was chosen.
+- After Google, the first return went to `localhost:8501/?code=...`: the dashboard address was not on Supabase's redirect list, so Supabase fell back to its Site URL. Fixed by listing the address (with and without `/**`) and setting the Site URL.
+- Google's consent screen stays in Testing; every person who signs in is a test user and on Render's `ALLOWED_EMAILS`.
+- Decisions: `INGEST_API_KEY` and `CORS_ORIGINS` unset on Render; no migration on deploy; Python not pinned on Render (3.14, as local).
+- Not yet checked on the live stack: a non-listed account, a cold start, all five pages, an upload, idle sign-out (doc 07 section 7.8).
