@@ -122,4 +122,4 @@ Render's free tier stops the API after about 15 minutes without outside traffic;
 3. Optional: turn on the email alert, which also tells you when the API is really down.
 4. After 20 minutes, open the dashboard: the first load should not show "Waking up the service…".
 
-Notes: `/health` is public and returns no data, so the monitor needs no secret. One service awake all month is about 744 of Render's 750 free instance hours. This does not keep the Streamlit app awake (it sleeps after a few idle days; its wake-up button restores it). Status: not set up yet; tick here when done: [ ]
+Notes: `/health` is public and returns no data, so the monitor needs no secret. One service awake all month is about 744 of Render's 750 free instance hours. This does not keep the Streamlit app awake (it sleeps after a few idle days; its wake-up button restores it). Status: set up 2026-11-11 (UptimeRobot, 5-minute HTTP(s) check on `/health`): [x]
