@@ -100,7 +100,7 @@ No performance or scale figures are claimed until measured. The public churn dat
 - Profile deletion (`user_profiles`) is not automated; deleting an account's rows is a manual operation. Would change: a user-facing delete-account feature.
 
 - Sign-in opens in a new tab on Streamlit Community Cloud; same-window sign-in is not possible there (doc 07, section 7.7). Would change: hosting the dashboard outside an iframe.
-- Both free tiers sleep (Render after about 15 idle minutes, Streamlit after a few idle days). The first visit is slow by design. Would change: a paid plan or a keep-warm ping.
+- Both free tiers sleep (Render after about 15 idle minutes, Streamlit after a few idle days). The first visit is slow by design. Would change: a paid plan, or the optional keep-warm monitor (doc 07, section 7.9).
 - The wake-up wait covers the first call of a page load only; if the API sleeps in the middle of a session, a later call shows "service unavailable" with Retry.
 - Migrations are applied by hand, not on deploy.
 

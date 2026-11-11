@@ -112,3 +112,14 @@ Tick each after trying it on the live stack. Sign-in from an allow-listed test u
 - [ ] All five pages load with data (Overview, Funnel, Retention, Engagement, Churn Risk)
 - [ ] Upload a trial CSV on Data & Uploads, see the pages change, then delete it
 - [ ] Idle sign-out after `IDLE_TIMEOUT_MINUTES` returns to the sign-in page
+
+## 7.9 Keep the API awake `[Optional]`
+
+Render's free tier stops the API after about 15 minutes without outside traffic; its own health checks do not count. An external monitor that calls `/health` every few minutes keeps it awake, so a visitor does not wait for a cold start. Nothing in the repo does this; it is set up on the monitor's website.
+
+1. Sign up at a free monitor such as UptimeRobot (or cron-job.org).
+2. Add a monitor of type HTTP(s) for `https://churnscope-e99o.onrender.com/health`, interval 5 minutes (the shortest the free plan allows), keyword or status check "200".
+3. Optional: turn on the email alert, which also tells you when the API is really down.
+4. After 20 minutes, open the dashboard: the first load should not show "Waking up the service…".
+
+Notes: `/health` is public and returns no data, so the monitor needs no secret. One service awake all month is about 744 of Render's 750 free instance hours. This does not keep the Streamlit app awake (it sleeps after a few idle days; its wake-up button restores it). Status: not set up yet; tick here when done: [ ]
